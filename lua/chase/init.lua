@@ -179,7 +179,6 @@ function M.setup()
     end
     local config = vim.json.decode(file:read())
     file:close()
-    print(vim.inspect(config))
 end
 
 -- M.buf_clear(32)

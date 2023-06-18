@@ -4,10 +4,9 @@ local M =  {
 M.config = {
     global = {
         python = {
-            virtual_envs = "~/venvs",
+            venvs_path = "~/venvs",
         },
     },
-    projects = {},
 }
 
 M.configs = {
