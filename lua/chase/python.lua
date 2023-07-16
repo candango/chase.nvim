@@ -120,18 +120,33 @@ function M.run_file(file)
         chase.project_root.filename .. chase.sep, ""
     )
     local buf = M.chase(relative_file)
+    local testing = file:match("_test.py$")
+    if not testing then
+        testing = file:match("test_.*.py$")
+    end
+    vim.print(testing)
     chase.buf_clear(buf)
+    local action = "Running "
+    if testing then
+        action = "Testing "
+    end
     chase.buf_append(buf, {
         "Candango Chase",
-        "Running " .. relative_file,
+        action .. relative_file,
         "Python: " .. M.preferred_python(),
         "Version: " .. M.python_version,
         "",
         ""
     })
 
+    local py_cmd = M.preferred_python()
+    local py_args = ""
+    if testing then
+        py_args = "-m unittest -v"
+    end
+    local cmd_list = { py_cmd, py_args, file }
     vim.fn.jobstart(
-    { M.preferred_python(), file },
+    table.concat(cmd_list, " "),
     {
         stdout_buffered = true,
         stderr_buffered = true,
@@ -142,7 +157,6 @@ function M.run_file(file)
             chase.buf_append(buf, data)
         end,
     })
-    -- vim.cmd("!" .. pyraz.preferred_python() .. " " .. file_name)
 end
 
 function M.on_vim_start()
