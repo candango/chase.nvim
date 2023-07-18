@@ -105,6 +105,7 @@ function M.buf_open(name, type)
         vim.api.nvim_buf_set_option(buf, "buftype", "nowrite")
         vim.api.nvim_buf_set_option(buf, "filetype", type)
         vim.api.nvim_buf_set_option(buf, "buflisted", false)
+        vim.api.nvim_buf_set_keymap(buf, "n", "q", ":q!<CR>", {})
         vim.api.nvim_set_current_win(cur_win)
         return buf
     end
