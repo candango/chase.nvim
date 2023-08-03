@@ -75,11 +75,6 @@ function M.on_python_save()
     -- vim.api.nvim_create_buf(false, false)
 end
 
-function M.chase(file)
-    local buf = chase.buf_open(file .. "_run")
-    return buf
-end
-
 function M.is_python_project()
     -- TODO: Finish to check other python project possibilities
     if chase.project_root:joinpath("setup.py"):exists() then
@@ -119,12 +114,11 @@ function M.run_file(file)
     local relative_file = file:gsub(
         chase.project_root.filename .. chase.sep, ""
     )
-    local buf = M.chase(relative_file)
+    local buf = chase.buf_chase(relative_file)
     local testing = file:match("_test.py$")
     if not testing then
         testing = file:match("test_.*.py$")
     end
-    vim.print(testing)
     chase.buf_clear(buf)
     local action = "Running "
     if testing then

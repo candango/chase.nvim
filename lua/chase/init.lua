@@ -49,6 +49,11 @@ local function merge_tables(...)
     return out
 end
 
+function M.buf_chase(file)
+    local buf = M.buf_open(file .. "_run")
+    return buf
+end
+
 function M.buf_is_visible(buf)
     -- Get a boolean that tells us if the buffer number is visible anymore.
     --
