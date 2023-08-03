@@ -11,8 +11,6 @@ local Path = require("plenary.path")
 
 local M = {}
 
-M.group = vim.api.nvim_create_augroup("ChasePy", { clear = true })
-
 M.buf_name_prefix = "ChasePy: "
 
 M.buf_name_suffix = " P)"
@@ -159,7 +157,7 @@ end
 
 vim.api.nvim_create_autocmd("VimEnter", {
     callback = M.on_vim_start,
-    group = M.group,
+    group = chase.group,
 })
 
 function M.setup()
@@ -172,7 +170,7 @@ function M.setup()
     vim.api.nvim_create_autocmd("BufWritePost", {
         callback = M.on_python_save,
         pattern = "*.py",
-        group = M.group,
+        group = chase.group,
     })
 end
 
