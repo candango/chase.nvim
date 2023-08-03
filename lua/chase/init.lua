@@ -49,6 +49,26 @@ local function merge_tables(...)
     return out
 end
 
+function M.chase_it(opts)
+    print(vim.inspect(opts.args))
+end
+
+function M.chase_it_complete(arg_lead, cmd_line, cursor_pos)
+    local cmd_line_x = vim.fn.split(cmd_line, " ")
+    local cmd_line_count = #cmd_line_x
+    M.log.warn(arg_lead)
+    if cmd_line_count == 1 then
+        return { "mark" }
+    end
+    if cmd_line_count == 2 then
+        return { "run" }
+    end
+end
+
+local chase_it_opts = { nargs = "*", complete=M.chase_it_complete }
+vim.api.nvim_create_user_command("Chase", M.chase_it, chase_it_opts)
+vim.api.nvim_create_user_command("C", M.chase_it, chase_it_opts)
+
 function M.buf_chase(file)
     local buf = M.buf_open(file .. "_run")
     return buf
