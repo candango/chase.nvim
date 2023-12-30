@@ -1,12 +1,22 @@
 -- Buffer creation see: https://stackoverflow.com/a/75240496
 local Data = require("chase.data")
 local Path = require("plenary.path")
+local Log = require("plenary.log")
 
 local M =  {}
 
+function M.is_windows()
+    return string.match(vim.loop.os_uname().sysname, "Windows") ~= nil
+end
+
 M.group = vim.api.nvim_create_augroup("CANDANGO_CHASE", { clear = true })
 M.sep = Path.path.sep
-M.user_home = Path:new(vim.fn.environ()['HOME'])
+M.user_home = Path:new(os.getenv("HOME"))
+
+if M.is_windows() then
+    M.user_home = os.getenv("UserProfile")
+end
+
 M.user_config_dir = Path:new(vim.fn.stdpath("data"), "chase")
 M.user_config = Data.config
 M.user_config_projects_file = Path:new(M.user_config_dir, "projects")
@@ -17,10 +27,11 @@ M.vim_did_enter = false
 
 M.python_buf_number = -1
 M.go_buf_number = -1
-
-M.log = require('plenary.log').new({
-    level = "info",
+M.log = Log.new({
+    level = "trace",
     plugin = "chase",
+    use_file = true,
+    outfile = vim.fn.stdpath("data") .. M.sep .. "chase.log",
     -- use_console = false,
 })
 
@@ -47,6 +58,14 @@ local function merge_tables(...)
         merge_table_impl(out, select(i, ...))
     end
     return out
+end
+
+function M.is_python_project()
+    -- TODO: Finish to check other python project possibilities
+    if M.project_root:joinpath("setup.py"):exists() then
+        return true
+    end
+    return false
 end
 
 function M.chase_it(opts)
@@ -163,18 +182,20 @@ function M.buf_append(buf, lines)
 end
 
 function M.setup()
-    if vim.fn.environ()['CHASE_DEBUG_LEVEL'] then
-        M.log = require('plenary.log').new({
-            level = vim.fn.environ()['CHASE_DEBUG_LEVEL'],
+    M.log.trace("Setting up chase")
+    if os.getenv("CHASE_DEBUG_LEVEL") then
+        M.log = Log.new({
+            level = os.getenv("CHASE_DEBUG_LEVEL"),
             plugin = "chase",
+            use_file = true,
+            outfile = vim.fn.stdpath("data") .. M.sep .. "chase.log",
             -- use_console = false,
         })
     end
 
-    if vim.fn.environ()['CHASE_HOME'] then
-        M.log.trace("changing user config home to " ..
-            vim.fn.environ()['CHASE_HOME'])
-        M.user_home = Path:new(vim.fn.environ()['CHASE_HOME'])
+    if os.getenv("CHASE_HOME") then
+        M.log.trace("changing user config home to " .. os.getenv("CHASE_HOME"))
+        M.user_home = Path:new(os.getenv("CHASE_HOME"))
         M.user_config_dir = Path:new(M.user_home, "chase")
         M.user_config_projects_file = Path:new(
             M.user_config_dir,
@@ -250,13 +271,21 @@ function M.setup_virtualenv(venv_prefix, callback)
 end
 
 function M.add_to_path(path)
-    local env_path = vim.fn.environ()["PATH"]
-    vim.cmd("let $PATH = '" .. path .. ":" .. env_path .. "'")
+    local env_path = os.getenv("PATH")
+    local path_sep = ":"
+    if M.is_windows then
+        path_sep = ";"
+    end
+    vim.cmd("let $PATH = '" .. path .. path_sep .. env_path .. "'")
 end
 
 function M.set_python_global(venv_path)
     local venv_bin = venv_path:joinpath("bin")
     local venv_host_prog = venv_bin:joinpath("python")
+    if M.is_windows() then
+        venv_bin = venv_path:joinpath("Scripts")
+        venv_host_prog = venv_bin:joinpath("python.exe")
+    end
     -- local venv_activate = venv_bin:joinpath("activate")
     M.add_to_path(venv_bin)
     vim.cmd("let g:python3_host_prog='" .. venv_host_prog .. "'")
@@ -269,7 +298,7 @@ end
 function M.install_package(venv_path, package, install)
     install = install or package
     vim.fn.jobstart(
-    { "pip", "show", package },
+    { "python", "-m", "pip", "show", package },
     {
         stderr_buffered = true,
         on_stderr = function(_, data)
@@ -278,7 +307,7 @@ function M.install_package(venv_path, package, install)
                 "installing " .. package .. " at venv " .. venv_path.filename
                 )
                 vim.fn.jobstart(
-                { "pip", "install", package },
+                { "python", "-m", "pip",  "install", package },
                 {
                     stdout_buffered = true,
                     on_stdout = function(_,_)

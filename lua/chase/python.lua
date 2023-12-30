@@ -52,17 +52,9 @@ function M.on_python_save()
     -- vim.api.nvim_create_buf(false, false)
 end
 
-function M.is_python_project()
-    -- TODO: Finish to check other python project possibilities
-    if chase.project_root:joinpath("setup.py"):exists() then
-        return true
-    end
-    return false
-end
-
 function M.setup_project_virtualenv()
     if M.setup_called then
-        if M.is_python_project() then
+        if chase.is_python_project() then
             local cwd_x = vim.fn.split(vim.fn.getcwd(), chase.sep)
             chase.setup_virtualenv(cwd_x[#cwd_x], M.set_python)
             vim.fn.jobstart(
@@ -79,9 +71,15 @@ function M.setup_project_virtualenv()
 end
 
 function M.preferred_python()
-    if vim.fn.environ()["VIRTUAL_ENV"] ~= nil then
+    if os.getenv("VIRTUAL_ENV") ~= nil then
+        local bin_path = "bin"
+        local python = "python"
+        if chase.is_windows() then
+            bin_path = "Scripts"
+            python = "python.exe"
+        end
         return Path:new(
-            vim.fn.environ()["VIRTUAL_ENV"], "bin", "python"
+            os.getenv("VIRTUAL_ENV"), bin_path, python
         ).filename
     end
     return vim.api.nvim_get_var("python3_host_prog")
@@ -155,6 +153,9 @@ end
 
 function M.set_python(venv_path)
     local venv_bin = venv_path:joinpath("bin")
+    if chase.is_windows() then
+        venv_bin = venv_path:joinpath("Scripts")
+    end
     -- local venv_activate = venv_bin:joinpath("activate")
     chase.add_to_path(venv_bin)
     -- let $VIRTUAL_ENV=<project_virtualenv>
