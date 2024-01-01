@@ -160,6 +160,10 @@ function M.set_python(venv_path)
     chase.add_to_path(venv_bin)
     -- let $VIRTUAL_ENV=<project_virtualenv>
     vim.cmd("let $VIRTUAL_ENV='" .. venv_path.filename .. "'")
+    if chase.is_windows then
+        vim.cmd("let $PYTHONPATH='.:" .. chase.project_root.filename .. "'")
+        return
+    end
     vim.cmd("let $PYTHONPATH='.:" .. chase.project_root.filename .. "'")
 end
 
