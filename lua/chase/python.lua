@@ -64,6 +64,9 @@ function M.setup_project_virtualenv()
                 on_stdout = function(_, data)
                     local result = vim.fn.join(data, "")
                     M.python_version = vim.fn.split(result, " ")[2]
+                    if chase.is_windows then
+                        M.python_version = M.python_version:gsub("\r", "")
+                    end
                 end,
             })
         end
@@ -86,6 +89,9 @@ function M.preferred_python()
 end
 
 function M.run_file(file)
+    if chase.is_windows() then
+        file = file:gsub("/", chase.sep)
+    end
     local relative_file = file:gsub(
         chase.project_root.filename .. chase.sep, ""
     )
@@ -120,6 +126,11 @@ function M.run_file(file)
         stdout_buffered = true,
         stderr_buffered = true,
         on_stdout = function(_, data)
+            if chase.is_windows() then
+                for i, v in ipairs(data) do
+                    data[i] = v:gsub("\r", "")
+                end
+            end
             chase.buf_append(buf, data)
         end,
         on_stderr = function(_, data)
