@@ -273,7 +273,7 @@ end
 function M.add_to_path(path)
     local env_path = os.getenv("PATH")
     local path_sep = ":"
-    if M.is_windows then
+    if M.is_windows() then
         path_sep = ";"
     end
     vim.cmd("let $PATH = '" .. path .. path_sep .. env_path .. "'")
