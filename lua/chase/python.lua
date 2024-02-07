@@ -20,9 +20,9 @@ M.vim_did_enter = false
 
 M.python_version = nil
 
--- Output buffers table
-M.bufs_out = {}
--- print(M.bufs_out)
+M.win_ref = nil
+
+M.buf_refs = {}
 
 function M.buf_is_main(buf_number)
     local lines = vim.api.nvim_buf_get_lines(buf_number, 0, -1, false)
@@ -90,23 +90,24 @@ function M.preferred_python()
 end
 
 function M.run_file(file)
+    local buf = vim.api.nvim_get_current_buf()
     if chase.is_windows() then
         file = file:gsub("/", chase.sep)
     end
     local relative_file = file:gsub(
         chase.project_root.filename .. chase.sep, ""
     )
-    local buf = chase.buf_chase(relative_file)
+    local chase_buf = chase.buf_chase(relative_file, buf)
     local testing = file:match("_test.py$")
     if not testing then
         testing = file:match("test_.*.py$")
     end
-    chase.buf_clear(buf)
+    chase.buf_clear(chase_buf)
     local action = "Running "
     if testing then
         action = "Testing "
     end
-    chase.buf_append(buf, {
+    chase.buf_append(chase_buf, {
         "Candango Chase",
         action .. relative_file,
         "Python: " .. M.preferred_python(),
@@ -118,6 +119,9 @@ function M.run_file(file)
     local py_cmd = M.preferred_python()
     local py_args = ""
     if testing then
+        local row, _ = unpack(vim.api.nvim_win_get_cursor(0))
+        local lines = vim.api.nvim_buf_get_lines(0, 0, row, false)
+        M.where_am_i(lines, row)
         py_args = "-m unittest -v"
     end
     local cmd_list = { py_cmd, py_args, file }
@@ -132,10 +136,10 @@ function M.run_file(file)
                     data[i] = v:gsub("\r", "")
                 end
             end
-            chase.buf_append(buf, data)
+            chase.buf_append(chase_buf, data)
         end,
         on_stderr = function(_, data)
-            chase.buf_append(buf, data)
+            chase.buf_append(chase_buf, data)
         end,
     })
 end
@@ -161,6 +165,30 @@ function M.setup()
         pattern = "*.py",
         group = chase.group,
     })
+
+    vim.api.nvim_create_autocmd("BufEnter", {
+        callback = chase.on_buf_enter,
+        pattern = "*.py",
+        group = chase.group,
+    })
+
+    -- vim.api.nvim_create_autocmd("BufLeave", {
+    --     callback = chase.on_buf_leave,
+    --     pattern = "*.py",
+    --     group = chase.group,
+    -- })
+    --
+    -- vim.api.nvim_create_autocmd("BufUnload", {
+    --     callback = chase.on_buf_unload,
+    --     pattern = "*.py",
+    --     group = chase.group,
+    -- })
+
+    vim.api.nvim_create_autocmd("BufHidden", {
+        callback = chase.on_buf_hidden,
+        pattern = "*.py",
+        group = chase.group,
+    })
 end
 
 function M.set_python(venv_path)
@@ -172,7 +200,7 @@ function M.set_python(venv_path)
     chase.add_to_path(venv_bin)
     -- let $VIRTUAL_ENV=<project_virtualenv>
     vim.cmd("let $VIRTUAL_ENV='" .. venv_path.filename .. "'")
-    if chase.is_windows then
+    if chase.is_windows() then
         vim.cmd("let $PYTHONPATH='.;" .. chase.project_root.filename .. "'")
         return
     end

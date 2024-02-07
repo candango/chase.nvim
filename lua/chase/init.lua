@@ -35,6 +35,9 @@ M.log = Log.new({
     -- use_console = false,
 })
 
+M.buf_refs = {}
+M.buf_win_refs = {}
+
 -- tbl_deep_extend does not work the way you would think
 -- yonk from harpoon, not public
 local function merge_table_impl(t1, t2)
@@ -88,9 +91,9 @@ local chase_it_opts = { nargs = "*", complete=M.chase_it_complete }
 vim.api.nvim_create_user_command("Chase", M.chase_it, chase_it_opts)
 vim.api.nvim_create_user_command("C", M.chase_it, chase_it_opts)
 
-function M.buf_chase(file)
-    local buf = M.buf_open(file .. "_run")
-    return buf
+function M.buf_chase(file, buf)
+    local chase_buf = M.buf_open(file .. "_run", buf)
+    return chase_buf
 end
 
 function M.buf_is_visible(buf)
@@ -127,11 +130,11 @@ function M.buf_from_name(name)
     return -1
 end
 
-function M.buf_open(name, type)
+function M.buf_open(name, buf, type)
     -- Get a boolean that tells us if the buffer number is visible anymore.
     --
     -- :help bufwinnr
-    local buf = -1
+    local chase_buf = -1
     name = name or "MONSTER_OF_THE_LAKE"
     type = type or "txt"
 
@@ -141,22 +144,105 @@ function M.buf_open(name, type)
     end
 
     local cur_win = vim.api.nvim_get_current_win()
-    if buf == -1 or not M.buf_is_visible(buf) then
+    if chase_buf == -1 or not M.buf_is_visible(chase_buf) then
         vim.cmd("botright vsplit " .. name)
-        buf = vim.api.nvim_get_current_buf()
+        chase_buf = vim.api.nvim_get_current_buf()
         -- vim.opt_local.readonly = true
-        vim.api.nvim_buf_set_option(buf, "readonly", true)
-        vim.api.nvim_buf_set_option(buf, "buftype", "nowrite")
-        vim.api.nvim_buf_set_option(buf, "filetype", type)
-        vim.api.nvim_buf_set_option(buf, "buflisted", false)
-        vim.api.nvim_buf_set_keymap(buf, "n", "q", ":q!<CR>", {})
+        vim.api.nvim_buf_set_option(chase_buf, "readonly", true)
+        vim.api.nvim_buf_set_option(chase_buf, "buftype", "nowrite")
+        vim.api.nvim_buf_set_option(chase_buf, "filetype", type)
+        vim.api.nvim_buf_set_option(chase_buf, "buflisted", false)
+        vim.api.nvim_buf_set_var(chase_buf, "original_buf", buf)
+        vim.api.nvim_buf_set_keymap(chase_buf, "n", "q", "",
+            {callback = function()
+                M.chase_buf_destroy(chase_buf)
+            end}
+        )
         vim.api.nvim_set_current_win(cur_win)
-        return buf
+        M.buf_refs[buf] = chase_buf
+        return chase_buf
     end
 end
 
--- print(M.buf_from_name("MONSTER_OF_THE_LAKE"))
--- print(vim.inspect(M.all_listed_buffers()))
+function M.on_buf_hidden()
+    local cur_buf = vim.api.nvim_get_current_buf()
+    local buf = M.buf_refs[cur_buf]
+    if buf then
+        M.buf_hide(buf)
+    end
+end
+
+function M.on_buf_enter()
+    local cur_buf = vim.api.nvim_get_current_buf()
+    for buf, buf_ref in pairs(M.buf_refs) do
+        if buf ~= cur_buf then
+            M.buf_hide(buf_ref)
+        end
+        if buf == cur_buf then
+            if M.buf_is_hidden(buf_ref) then
+                M.buf_show(buf_ref)
+            end
+        end
+    end
+end
+
+-- function M.on_buf_leave()
+--     local cur_buf = vim.api.nvim_get_current_buf()
+--     print("BufLeave" .. cur_buf)
+-- end
+--
+-- function M.on_buf_unload()
+--     local cur_buf = vim.api.nvim_get_current_buf()
+--     print("BufUnload" .. cur_buf)
+-- end
+
+function M.chase_buf_close(buf)
+
+end
+
+function M.buf_is_hidden(buf)
+    local win = vim.fn.bufwinid(buf)
+    if win > 0 then
+        return false
+    end
+    return true
+end
+
+function M.buf_show(buf)
+    local win = vim.fn.bufwinid(buf)
+    local cur_win = vim.api.nvim_get_current_win()
+    if win == -1 then
+        vim.cmd("botright vsplit")
+        win = vim.api.nvim_get_current_win()
+    end
+    -- set buf to current window
+    vim.api.nvim_win_set_buf(win, buf)
+    vim.api.nvim_set_current_win(cur_win)
+end
+
+function M.buf_hide(buf)
+    local win = vim.fn.bufwinid(buf)
+    if win > 0 then
+        local buftype = vim.api.nvim_buf_get_option(buf, "buftype")
+        vim.api.nvim_buf_set_option(buf, "buftype", "")
+        vim.api.nvim_win_hide(win)
+        if buftype then
+            vim.api.nvim_buf_set_option(buf, "buftype", buftype)
+        end
+    end
+end
+
+function M.chase_buf_destroy(chase_buf)
+    local buf = vim.api.nvim_buf_get_var(chase_buf, "original_buf")
+    local buf_refs = {}
+    for buf_ref, buf_chase in pairs(M.buf_refs) do
+        if buf_ref ~= buf then
+            buf_refs[buf_ref] = buf_chase
+        end
+    end
+    M.buf_refs = buf_refs
+    vim.cmd("bd " .. chase_buf)
+end
 
 function M.buf_clear(buf)
     vim.api.nvim_buf_set_option(buf, "buftype", "")
