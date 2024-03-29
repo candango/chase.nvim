@@ -1,10 +1,3 @@
--- see:help events
--- au BufWritePost  <=== To display the autocmds
--- au! BufWritePost <=== To clear
--- SEE: https://youtu.be/HR1dKKrOmDs?t=324
--- SEE: https://youtu.be/9gUatBHuXE0?t=453 <== Jobstart
--- SEE: https://stackoverflow.com/a/75240496
-
 local chase = require("chase")
 local Log = chase.log
 local Path = require("plenary.path")
@@ -46,7 +39,7 @@ function M.on_python_save()
     if M.buf_is_main(data.buf) then
         Log.info("Doing main stuff...")
         -- print(vim.inspect(data))
-        chase.buf_open(data.file .. "_run")
+        -- chase.buf_open(data.file .. "_run")
     end
     -- print(vim.inspect(data))
     -- vim.api.nvim_create_buf(false, false)
@@ -167,7 +160,18 @@ function M.setup()
     })
 
     vim.api.nvim_create_autocmd("BufEnter", {
-        callback = chase.on_buf_enter,
+        callback = function()
+            local keymaps = {
+                {
+                    mode = "n",
+                    lhs = "<leader>cc",
+                    opts = { callback = function ()
+                       M.run_file(vim.api.nvim_buf_get_name(0))
+                    end },
+                },
+            }
+            chase.on_buf_enter(keymaps)
+        end,
         pattern = "*.py",
         group = chase.group,
     })

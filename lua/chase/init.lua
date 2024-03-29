@@ -1,4 +1,3 @@
--- Buffer creation see: https://stackoverflow.com/a/75240496
 local Data = require("chase.data")
 local Path = require("plenary.path")
 local Log = require("plenary.log")
@@ -27,8 +26,9 @@ M.vim_did_enter = false
 
 M.python_buf_number = -1
 M.go_buf_number = -1
+local log_level = os.getenv("CHASE_LOG_LEVEL") or "warn"
 M.log = Log.new({
-    level = "trace",
+    level = log_level,
     plugin = "chase",
     use_file = true,
     outfile = vim.fn.stdpath("data") .. M.sep .. "chase.log",
@@ -172,15 +172,43 @@ function M.on_buf_hidden()
     end
 end
 
-function M.on_buf_enter()
+function M.on_buf_enter(extra_keymaps)
+    extra_keymaps = extra_keymaps or {}
     local cur_buf = vim.api.nvim_get_current_buf()
-    for buf, buf_ref in pairs(M.buf_refs) do
+    local keymaps = {
+        {
+            mode = "n",
+            lhs = "<leader>cd",
+            opts = { callback = function () M.destroy_my_chase(cur_buf) end },
+        },
+        {
+            mode = "n",
+            lhs = "q",
+            opts = { callback = function () M.destroy_my_chase(cur_buf) end },
+        },
+    }
+    for _, keymap in pairs(extra_keymaps) do
+        keymaps[#keymaps+1] = keymap
+    end
+    local found, _ = pcall(
+        vim.api.nvim_buf_get_var, cur_buf, "chase_keymaps_set")
+    if not found then
+        vim.api.nvim_buf_set_var(cur_buf, "chase_keymaps_set", true)
+        for _, keymap in pairs(keymaps) do
+            local mode = keymap["mode"]
+            local lhs = keymap["lhs"] or ""
+            local rhs = keymap["rhs"] or ""
+            local opts = keymap["opts"] or {}
+            vim.api.nvim_buf_set_keymap(cur_buf, mode, lhs, rhs, opts)
+        end
+    end
+    for buf, chase_buf in pairs(M.buf_refs) do
         if buf ~= cur_buf then
-            M.buf_hide(buf_ref)
+            M.buf_hide(chase_buf)
         end
         if buf == cur_buf then
-            if M.buf_is_hidden(buf_ref) then
-                M.buf_show(buf_ref)
+            if M.buf_is_hidden(chase_buf) then
+                M.buf_show(chase_buf)
             end
         end
     end
@@ -228,6 +256,15 @@ function M.buf_hide(buf)
         vim.api.nvim_win_hide(win)
         if buftype then
             vim.api.nvim_buf_set_option(buf, "buftype", buftype)
+        end
+    end
+end
+
+function M.destroy_my_chase(buf)
+    for buf_ref, buf_chase in pairs(M.buf_refs) do
+        if buf_ref == buf then
+            M.chase_buf_destroy(buf_chase)
+            break
         end
     end
 end
