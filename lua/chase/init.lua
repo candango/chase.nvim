@@ -11,16 +11,29 @@ end
 M.group = vim.api.nvim_create_augroup("CANDANGO_CHASE", { clear = true })
 M.sep = Path.path.sep
 M.user_home = Path:new(os.getenv("HOME"))
+M.installed_python = "python"
 
 if M.is_windows() then
     M.user_home = os.getenv("UserProfile")
+end
+
+if not M.is_windows() then
+    vim.fn.jobstart(
+    { "which", "python3"},
+    {
+        stdout_buffered = true,
+        on_stdout = function(_, data)
+            if #data[1] > 0 then
+                M.installed_python = "python3"
+            end
+        end,
+    })
 end
 
 M.user_config_dir = Path:new(vim.fn.stdpath("data"), "chase")
 M.user_config = Data.config
 M.user_config_projects_file = Path:new(M.user_config_dir, "projects")
 M.project_root = Path:new(vim.fn.getcwd())
-
 
 M.vim_did_enter = false
 
@@ -373,7 +386,7 @@ function M.setup_virtualenv(venv_prefix, callback)
         M.log.warn("creating virtualenv for " .. venv_prefix)
         vim.fn.jobstart(
         {
-            "python",  "-m", "venv", "--clear",
+            M.installed_python,  "-m", "venv", "--clear",
             "--upgrade-deps", venv_path.filename,
         },
         {
@@ -404,7 +417,7 @@ end
 
 function M.set_python_global(venv_path)
     local venv_bin = venv_path:joinpath("bin")
-    local venv_host_prog = venv_bin:joinpath("python")
+    local venv_host_prog = venv_bin:joinpath(M.installed_python)
     if M.is_windows() then
         venv_bin = venv_path:joinpath("Scripts")
         venv_host_prog = venv_bin:joinpath("python.exe")
@@ -421,7 +434,7 @@ end
 function M.install_package(venv_path, package, install)
     install = install or package
     vim.fn.jobstart(
-    { "python", "-m", "pip", "show", package },
+    { M.installed_python, "-m", "pip", "show", package },
     {
         stderr_buffered = true,
         on_stderr = function(_, data)
@@ -430,7 +443,7 @@ function M.install_package(venv_path, package, install)
                 "installing " .. package .. " at venv " .. venv_path.filename
                 )
                 vim.fn.jobstart(
-                { "python", "-m", "pip",  "install", package },
+                { M.installed_python, "-m", "pip",  "install", package },
                 {
                     stdout_buffered = true,
                     on_stdout = function(_,_)

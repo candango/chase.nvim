@@ -70,7 +70,7 @@ end
 function M.preferred_python()
     if os.getenv("VIRTUAL_ENV") ~= nil then
         local bin_path = "bin"
-        local python = "python"
+        local python = chase.installed_python
         if chase.is_windows() then
             bin_path = "Scripts"
             python = "python.exe"
