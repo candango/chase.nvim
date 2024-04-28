@@ -18,16 +18,12 @@ if M.is_windows() then
 end
 
 if not M.is_windows() then
-    vim.fn.jobstart(
-    { "which", "python3"},
-    {
-        stdout_buffered = true,
-        on_stdout = function(_, data)
-            if #data[1] > 0 then
-                M.installed_python = "python3"
-            end
-        end,
-    })
+    local stream = assert(io.popen('which python3', 'r'))
+    local output = stream:read('*all')
+    stream:close()
+    if #output > 0 then
+        M.installed_python = "python3"
+    end
 end
 
 M.user_config_dir = Path:new(vim.fn.stdpath("data"), "chase")
