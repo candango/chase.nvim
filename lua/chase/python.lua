@@ -82,6 +82,35 @@ function M.preferred_python()
     return vim.api.nvim_get_var("python3_host_prog")
 end
 
+function M.where_am_i(lines, row)
+    local where_am_i = ""
+    for i = #lines, 1, -1 do
+        local line = lines[i]
+        if line:match("[async ]?def test_") and i == row then
+            local method_name = line:gsub(
+                "^%s*async%s*", ""):gsub("^%s*def%s*", ""):gsub(
+                "%s*[(].*", "")
+            where_am_i =  where_am_i .. "." .. method_name
+        end
+        if line:match("^%s*class") and line:match("%w+TestCase") then
+            local class_name = line:gsub(
+                "^%s*class%s*", ""):gsub("%s*[(].*", "")
+            where_am_i = class_name .. where_am_i
+            break
+        end
+    end
+    return where_am_i
+end
+
+function M.get_current_module(file)
+    local relative_path = file:gsub(chase.project_root.filename, "")
+    if relative_path:sub(1,1) == chase.sep then
+        relative_path = relative_path:sub(2, -1)
+    end
+    local current_module = relative_path:gsub(".py", ""):gsub(chase.sep, ".")
+    return current_module
+end
+
 function M.run_file(file)
     local buf = vim.api.nvim_get_current_buf()
     if chase.is_windows() then
@@ -103,10 +132,6 @@ function M.run_file(file)
     chase.buf_append(chase_buf, {
         "Candango Chase",
         action .. relative_file,
-        "Python: " .. M.preferred_python(),
-        "Version: " .. M.python_version,
-        "",
-        ""
     })
 
     local py_cmd = M.preferred_python()
@@ -114,10 +139,33 @@ function M.run_file(file)
     if testing then
         local row, _ = unpack(vim.api.nvim_win_get_cursor(0))
         local lines = vim.api.nvim_buf_get_lines(0, 0, row, false)
-        M.where_am_i(lines, row)
-        py_args = "-m unittest -v"
+        local current_module = M.get_current_module(file)
+        local current_testing = current_module
+        local where_am_i = M.where_am_i(lines, row)
+        chase.buf_append(chase_buf, {
+            "Current module: " .. current_module,
+        })
+        if where_am_i ~= "" then
+            current_testing = current_testing .. "." .. where_am_i
+            chase.buf_append(chase_buf, {
+                "Location: " .. where_am_i,
+            })
+        end
+        py_args = "-m unittest -v " .. current_testing
     end
-    local cmd_list = { py_cmd, py_args, file }
+
+    chase.buf_append(chase_buf, {
+        "Python: " .. M.preferred_python(),
+        "Version: " .. M.python_version,
+        "",
+        ""
+    })
+
+    local cmd_list = { py_cmd, py_args }
+    if not testing then
+        cmd_list[#cmd_list+1] = file
+    end
+
     vim.fn.jobstart(
     table.concat(cmd_list, " "),
     {
