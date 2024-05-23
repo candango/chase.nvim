@@ -162,7 +162,7 @@ function M.buf_open(name, buf, type)
         vim.api.nvim_buf_set_option(chase_buf, "filetype", type)
         vim.api.nvim_buf_set_option(chase_buf, "buflisted", false)
         vim.api.nvim_buf_set_var(chase_buf, "original_buf", buf)
-        vim.api.nvim_buf_set_keymap(chase_buf, "n", "q", "",
+        vim.api.nvim_buf_set_keymap(chase_buf, "n", "<leader>q", "",
             {callback = function()
                 M.chase_buf_destroy(chase_buf)
             end}
@@ -192,7 +192,7 @@ function M.on_buf_enter(extra_keymaps)
         },
         {
             mode = "n",
-            lhs = "q",
+            lhs = "<leader>q",
             opts = { callback = function () M.destroy_my_chase(cur_buf) end },
         },
     }
