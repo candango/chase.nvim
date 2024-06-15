@@ -84,20 +84,24 @@ end
 
 function M.where_am_i(lines, row)
     local where_am_i = ""
+    local class_name = ""
+    local method_name = ""
     for i = #lines, 1, -1 do
         local line = lines[i]
-        if line:match("[async ]?def test_") and i == row then
-            local method_name = line:gsub(
+        if line:match("[async ]?def test_") and method_name == "" then
+            method_name = line:gsub(
                 "^%s*async%s*", ""):gsub("^%s*def%s*", ""):gsub(
                 "%s*[(].*", "")
-            where_am_i =  where_am_i .. "." .. method_name
         end
         if line:match("^%s*class") and line:match("%w+TestCase") then
-            local class_name = line:gsub(
+            class_name = line:gsub(
                 "^%s*class%s*", ""):gsub("%s*[(].*", "")
-            where_am_i = class_name .. where_am_i
             break
         end
+    end
+    where_am_i = class_name
+    if method_name ~= "" then
+        where_am_i =  where_am_i .. "." .. method_name
     end
     return where_am_i
 end
