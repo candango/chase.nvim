@@ -57,7 +57,7 @@ end
 
 function M.setup_project_virtualenv()
     if M.setup_called then
-        if chase.is_python_project() then
+        if M.is_python_project() then
             local cwd_x = vim.fn.split(vim.fn.getcwd(), chase.sep)
             local venv_prefix = table.concat(cwd_x, "_", #cwd_x-1, #cwd_x)
             chase.setup_virtualenv(venv_prefix, M.set_python)

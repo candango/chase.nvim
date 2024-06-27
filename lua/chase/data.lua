@@ -2,15 +2,9 @@ local M =  {
 }
 
 M.config = {
-    global = {
-        python = {
-            venvs_path = "~/venvs",
-        },
+    python = {
+        venvs_dir = vim.fs.normalize("~/venvs"),
     },
-}
-
-M.configs = {
-    python = {},
 }
 
 return M

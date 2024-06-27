@@ -27,7 +27,7 @@ if not M.is_windows() then
 end
 
 M.user_config_dir = Path:new(vim.fn.stdpath("data"), "chase")
-M.user_config = Data.config
+M.config = Data.config
 M.user_config_projects_file = Path:new(M.user_config_dir, "projects")
 M.project_root = Path:new(vim.fn.getcwd())
 
@@ -280,7 +280,9 @@ function M.buf_append(buf, lines)
     vim.api.nvim_buf_set_option(buf, "buftype", "nowrite")
 end
 
-function M.setup()
+function M.setup(config)
+    config = config or {}
+    M.config = vim.tbl_deep_extend("force", M.config, config)
     M.log.trace("Setting up chase")
     if os.getenv("CHASE_DEBUG_LEVEL") then
         M.log = Log.new({
@@ -341,7 +343,7 @@ function M.setup_virtualenv(venv_prefix, callback)
     local cwd_x = vim.fn.split(vim.fn.getcwd(), M.sep)
     venv_prefix = venv_prefix or cwd_x[#cwd_x]
     local venv_name = venv_prefix .. "_env"
-    local venv_root = Path:new(M.user_home, "venvs")
+    local venv_root = Path:new(M.config.python.venvs_dir)
     local venv_path = Path:new(venv_root, venv_name)
 
     if not venv_path:exists() then
