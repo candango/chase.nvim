@@ -47,39 +47,6 @@ M.log = Log.new({
 M.buf_refs = {}
 M.buf_win_refs = {}
 
--- tbl_deep_extend does not work the way you would think
--- yonk from harpoon, not public
-local function merge_table_impl(t1, t2)
-    for k, v in pairs(t2) do
-        if type(v) == "table" then
-            if type(t1[k]) == "table" then
-                merge_table_impl(t1[k], v)
-            else
-                t1[k] = v
-            end
-        else
-            t1[k] = v
-        end
-    end
-end
-
-local function merge_tables(...)
-    M.log.trace("_merge_tables()")
-    local out = {}
-    for i = 1, select("#", ...) do
-        merge_table_impl(out, select(i, ...))
-    end
-    return out
-end
-
-function M.is_python_project()
-    -- TODO: Finish to check other python project possibilities
-    if M.project_root:joinpath("setup.py"):exists() then
-        return true
-    end
-    return false
-end
-
 function M.chase_it(opts)
     print(vim.inspect(opts.args))
 end

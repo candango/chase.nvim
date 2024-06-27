@@ -17,6 +17,16 @@ M.win_ref = nil
 
 M.buf_refs = {}
 
+function M.is_python_project()
+    local prj_files = { "pyproject.toml", "setup.cfg", "setup.py" }
+    for _, file in ipairs(prj_files) do
+        if chase.project_root:joinpath(file):exists() then
+            return true
+        end
+    end
+    return false
+end
+
 function M.buf_is_main(buf_number)
     local lines = vim.api.nvim_buf_get_lines(buf_number, 0, -1, false)
     for _, line in ipairs(lines) do
