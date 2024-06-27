@@ -1,0 +1,49 @@
+name: Run chase tests
+
+on: [push, pull_request]
+
+jobs:
+  run-tests:
+    name: unit tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            rev: nightly/nvim-linux64.tar.gz
+          - os: ubuntu-22.04
+            rev: v0.9.5/nvim-linux64.tar.gz
+          - os: ubuntu-22.04
+            rev: v0.10.0/nvim-linux64.tar.gz
+    steps:
+      - uses: actions/checkout@v4
+      - run: date +%F > todays-date
+      - name: Restore cache for today's nightly.
+        uses: actions/cache@v4
+        with:
+          path: _neovim
+          key: ${{ runner.os }}-${{ matrix.rev }}-${{ hashFiles('todays-date') }} 
+      - name: Prepare
+        run: |
+          test -d _neovim || {
+            mkdir -p _neovim
+            curl -sL "https://github.com/neovim/neovim/releases/download/${{ matrix.rev }}" | tar xzf - --strip-components=1 -C "${PWD}/_neovim"
+          }
+          echo "****************************************"
+          ls -lah
+          echo "****************************************"
+          cd $HOME
+          echo "****************************************"
+          ls -lah
+          cd -
+          ./scripts/prepare_nvim.sh
+          export PATH="${PWD}/_neovim/bin:${PATH}"
+          export VIM="${PWD}/_neovim/share/nvim/runtime"
+          timeout --preserve-status -s QUIT 10 nvim --headless -c "lua print('')" & true
+          timeout --preserve-status -s QUIT 4 nvim --headless -c "Lazy install" & true
+      - name: Run tests
+        run: |
+          export PATH="${PWD}/_neovim/bin:${PATH}"
+          export VIM="${PWD}/_neovim/share/nvim/runtime"
+          nvim --version
+          timeout --preserve-status -s QUIT 10 nvim --headless -c "PlenaryBustedDirectory tests"
