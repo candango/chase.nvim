@@ -25,25 +25,17 @@ jobs:
           key: ${{ runner.os }}-${{ matrix.rev }}-${{ hashFiles('todays-date') }} 
       - name: Prepare
         run: |
-          test -d _neovim || {
-            mkdir -p _neovim
-            curl -sL "https://github.com/neovim/neovim/releases/download/${{ matrix.rev }}" | tar xzf - --strip-components=1 -C "${PWD}/_neovim"
+          test -d "${HOME}/_neovim" || {
+            mkdir -p "${HOME}/_neovim"
+            mkdir -p "${HOME}/_plugins/plenary"
+            mkdir -p "${HOME}/work/neovim/neovim/.deps/usr/lib/lua/5.1"
+            curl -sL "https://github.com/neovim/neovim/releases/download/${{ matrix.rev }}" | tar xzf - --strip-components=1 -C "${HOME}/_neovim"
+            curl -sL "https://github.com/nvim-lua/plenary.nvim/archive/refs/tags/v0.1.4.tar.gz" | tar xzf - --strip-components=1 -C "${HOME}/_plugins/plenary"
+            ln -s "${HOME}/_plugins/plenary/lua/plenary"
           }
-          echo "****************************************"
-          ls -lah
-          echo "****************************************"
-          cd $HOME
-          echo "****************************************"
-          ls -lah
-          cd -
-          ./scripts/prepare_nvim.sh
-          export PATH="${PWD}/_neovim/bin:${PATH}"
-          export VIM="${PWD}/_neovim/share/nvim/runtime"
-          timeout --preserve-status -s QUIT 10 nvim --headless -c "lua print('')" & true
-          timeout --preserve-status -s QUIT 4 nvim --headless -c "Lazy install" & true
       - name: Run tests
         run: |
-          export PATH="${PWD}/_neovim/bin:${PATH}"
-          export VIM="${PWD}/_neovim/share/nvim/runtime"
+          export PATH="${HOME}/_neovim/bin:${PATH}"
+          export VIM="${HOME}/_neovim/share/nvim/runtime"
           nvim --version
-          timeout --preserve-status -s QUIT 10 nvim --headless -c "PlenaryBustedDirectory tests"
+          timeout --preserve-status -s QUIT 10 nvim --headless --noplugin -u scripts/minimal.vim -c "PlenaryBustedDirectory tests"
