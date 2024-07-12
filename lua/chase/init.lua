@@ -325,6 +325,12 @@ function M.setup(config)
     if file == nil then
         return
     end
+    if M.config.python.enabled then
+        require("chase.python").setup()
+    end
+    if M.config.go.enabled then
+        require("chase.go").setup()
+    end
     local config = vim.json.decode(file:read())
     file:close()
 end

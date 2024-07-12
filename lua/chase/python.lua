@@ -211,9 +211,7 @@ vim.api.nvim_create_autocmd("VimEnter", {
 function M.setup()
     M.setup_called = true
 
-    if chase.vim_did_enter then
-        M.setup_project_virtualenv()
-    end
+    M.setup_project_virtualenv()
 
     vim.api.nvim_create_autocmd("BufWritePost", {
         callback = M.on_python_save,
