@@ -325,12 +325,6 @@ function M.setup(config)
     if file == nil then
         return
     end
-    if M.config.python.enabled then
-        require("chase.python").setup()
-    end
-    if M.config.go.enabled then
-        require("chase.go").setup()
-    end
     local config = vim.json.decode(file:read())
     file:close()
 end
@@ -433,6 +427,12 @@ vim.api.nvim_create_autocmd("VimEnter", {
     callback = function ()
         M.vim_did_enter = true
         M.setup_virtualenv("chase_global", M.set_python_global)
+        if M.config.python.enabled then
+            require("chase.python").setup()
+        end
+        if M.config.go.enabled then
+            require("chase.go").setup()
+        end
     end,
     group = M.group,
 })
