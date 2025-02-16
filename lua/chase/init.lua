@@ -51,7 +51,7 @@ function M.chase_it(opts)
     print(vim.inspect(opts.args))
 end
 
-function M.chase_it_complete(arg_lead, cmd_line, cursor_pos)
+function M.chase_it_complete(arg_lead, cmd_line, _) -- cursor_pos)
     local cmd_line_x = vim.fn.split(cmd_line, " ")
     local cmd_line_count = #cmd_line_x
     M.log.warn(arg_lead)

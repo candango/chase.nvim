@@ -213,46 +213,36 @@ function M.setup()
 
     M.setup_project_virtualenv()
 
-    vim.api.nvim_create_autocmd("BufWritePost", {
-        callback = M.on_python_save,
-        pattern = "*.py",
-        group = chase.group,
-    })
+    if M.is_python_project() then
+        vim.api.nvim_create_autocmd("BufWritePost", {
+            callback = M.on_python_save,
+            pattern = "*.py",
+            group = chase.group,
+        })
 
-    vim.api.nvim_create_autocmd("BufEnter", {
-        callback = function()
-            local keymaps = {
-                {
-                    mode = "n",
-                    lhs = "<leader>cc",
-                    opts = { callback = function ()
-                       M.run_file(vim.api.nvim_buf_get_name(0))
-                    end },
-                },
-            }
-            chase.on_buf_enter(keymaps)
-        end,
-        pattern = "*.py",
-        group = chase.group,
-    })
+        vim.api.nvim_create_autocmd("BufEnter", {
+            callback = function()
+                local keymaps = {
+                    {
+                        mode = "n",
+                        lhs = "<leader>cc",
+                        opts = { callback = function ()
+                            M.run_file(vim.api.nvim_buf_get_name(0))
+                        end },
+                    },
+                }
+                chase.on_buf_enter(keymaps)
+            end,
+            pattern = "*.py",
+            group = chase.group,
+        })
 
-    -- vim.api.nvim_create_autocmd("BufLeave", {
-    --     callback = chase.on_buf_leave,
-    --     pattern = "*.py",
-    --     group = chase.group,
-    -- })
-    --
-    -- vim.api.nvim_create_autocmd("BufUnload", {
-    --     callback = chase.on_buf_unload,
-    --     pattern = "*.py",
-    --     group = chase.group,
-    -- })
-
-    vim.api.nvim_create_autocmd("BufHidden", {
-        callback = chase.on_buf_hidden,
-        pattern = "*.py",
-        group = chase.group,
-    })
+        vim.api.nvim_create_autocmd("BufHidden", {
+            callback = chase.on_buf_hidden,
+            pattern = "*.py",
+            group = chase.group,
+        })
+    end
 end
 
 function M.set_python(venv_path)
