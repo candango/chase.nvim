@@ -56,24 +56,22 @@ function M.on_python_save()
 end
 
 function M.setup_project_virtualenv()
-    if M.setup_called then
-        if M.is_python_project() then
-            local cwd_x = vim.fn.split(vim.fn.getcwd(), chase.sep)
-            local venv_prefix = table.concat(cwd_x, "_", #cwd_x-1, #cwd_x)
-            chase.setup_virtualenv(venv_prefix, M.set_python)
-            vim.fn.jobstart(
-            { M.preferred_python(), "--version" },
-            {
-                stdout_buffered = true,
-                on_stdout = function(_, data)
-                    local result = vim.fn.join(data, "")
-                    M.python_version = vim.fn.split(result, " ")[2]
-                    if chase.is_windows then
-                        M.python_version = M.python_version:gsub("\r", "")
-                    end
-                end,
-            })
-        end
+    if M.setup_called and M.is_python_project then
+        local cwd_x = vim.fn.split(vim.fn.getcwd(), chase.sep)
+        local venv_prefix = table.concat(cwd_x, "_", #cwd_x-1, #cwd_x)
+        chase.setup_virtualenv(venv_prefix, M.set_python)
+        vim.fn.jobstart(
+        { M.preferred_python(), "--version" },
+        {
+            stdout_buffered = true,
+            on_stdout = function(_, data)
+                local result = vim.fn.join(data, "")
+                M.python_version = vim.fn.split(result, " ")[2]
+                if chase.is_windows then
+                    M.python_version = M.python_version:gsub("\r", "")
+                end
+            end,
+        })
     end
 end
 
