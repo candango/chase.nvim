@@ -3,7 +3,7 @@ local M =  {
 
 M.config = {
     go = {
-        enabled = false,
+        enabled = true,
     },
     python = {
         enabled = true,
