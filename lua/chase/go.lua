@@ -13,6 +13,117 @@ M.go_bin = nil
 M.go_arch = nil
 M.go_version = nil
 
+-- Query for top-level tests
+local test_query = vim.treesitter.query.parse("go", [[
+    (function_declaration
+        name: (identifier) @func.name
+        parameters: (parameter_list
+            (parameter_declaration
+                type: (pointer_type
+                    (qualified_type
+                        package: (package_identifier) @pkg
+                        name: (type_identifier) @type))))
+        body: (block) @body
+        (#match? @func.name "^Test")
+        (#eq? @pkg "testing")
+        (#eq? @type "T"))
+]])
+
+-- Query for t.Run subtests
+local subtest_query = vim.treesitter.query.parse("go", [[
+    (call_expression
+        function: (selector_expression
+            operand: (identifier) @t
+            field: (field_identifier) @method
+            (#eq? @t "t")
+            (#eq? @method "Run"))
+        arguments: (argument_list
+            (interpreted_string_literal
+               (interpreted_string_literal_content) @subtest.name) 
+            (func_literal
+                parameters: (parameter_list
+                    (parameter_declaration
+                        type: (pointer_type
+                            (qualified_type
+                                package: (package_identifier) @pkg
+                                name: (type_identifier) @type))))
+                body: (block) @body))
+        (#eq? @pkg "testing")
+        (#eq? @type "T"))
+]])
+
+--- Retrieves a table of top-level Go test function names from a buffer using
+--- Tree-sitter. Only includes functions matching the pattern
+--- `TestXxx(t *testing.T)` defined at the top level of the file. Subtests
+--- within `t.Run` calls are excluded. The buffer must contain valid Go code
+--- and have the Go Tree-sitter parser available.
+--- Returns empty table if buffer is invalid, unloaded, or no tests are found.
+---
+--- @param buf number The buffer number to analyze.
+--- @return table table A table of top-level test function names (e.g., {"TestFoo", "TestBar"}). 
+function M.tests_in_buffer(buf)
+    if not vim.api.nvim_buf_is_valid(buf) or not vim.api.nvim_buf_is_loaded(buf) then
+        return {}
+    end
+    local parser = vim.treesitter.get_parser(buf, "go")
+    local tree = parser:parse()[1]
+    if not tree then
+        return {}
+    end
+    local tests = {}
+    for _, node, _ in test_query:iter_captures(tree:root(), buf, 0, -1) do
+        local name = vim.treesitter.get_node_text(node, buf)
+        if name:match("^Test") then
+           table.insert(tests, name)
+        end
+    end
+    return tests
+end
+
+function M.where_am_i(buf)
+    local all_tests = M.tests_in_buffer(buf)
+    for i, nome in ipairs(all_tests) do
+        all_tests[i] = "^" .. nome ..  "$"
+    end
+    if not vim.api.nvim_buf_is_valid(buf) or not vim.api.nvim_buf_is_loaded(buf) then
+        return {}
+    end
+    local parser = vim.treesitter.get_parser(buf, "go")
+    local tree = parser:parse()[1]
+    if not tree then
+        return {}
+    end
+    local cursor_pos = vim.api.nvim_win_get_cursor(0)
+    local row = cursor_pos[1] - 1
+    local tests = {}
+    for _, match, _ in test_query:iter_matches(tree:root(), buf) do
+        local func_node = match[1] -- @func.name TSNode[1]
+        local body_node = match[4] -- @func.body TSNode[1]
+        local start_row, _, end_row, _ = body_node:range()
+        if row >= start_row  and row <= end_row then
+            local name = vim.treesitter.get_node_text(func_node, buf)
+            table.insert(tests, name)
+        end
+    end
+    if #tests == 0 then
+        return table.concat(all_tests, "|")
+    end
+    for _, match, _ in subtest_query:iter_matches(tree:root(), buf) do
+        local func_node = match[3] -- @func.name TSNode
+        local body_node = match[6] -- @func.body TSNode
+        local start_row, _, end_row, _ = body_node:range()
+        if row >= start_row  and row <= end_row then
+            local name = vim.treesitter.get_node_text(func_node, buf)
+            name = string.gsub(name, " ", "_")
+            table.insert(tests, name)
+        end
+    end
+    for i, nome in ipairs(tests) do
+        tests[i] = "^" .. nome ..  "$"
+    end
+    return table.concat(tests, "/")
+end
+
 function M.buf_is_main(buf_number)
     local lines = vim.api.nvim_buf_get_lines(buf_number, 0, -1, false)
     for _, line in ipairs(lines) do
@@ -71,7 +182,13 @@ function M.run_file(file)
         --     })
         -- end
 	    -- CGO_ENABLED=0 go clean -testcache && go test -v  ./...
-        go_args = "test -v ./ -run=./" .. relative_file
+        local where_am_i  = M.where_am_i(buf)
+        if where_am_i ~= "" then
+            chase.buf_append(chase_buf, {
+                "Location: " .. where_am_i,
+            })
+        end
+        go_args = "test -v ./... -run='" .. where_am_i .. "'"
     end
 
     chase.buf_append(chase_buf, {
