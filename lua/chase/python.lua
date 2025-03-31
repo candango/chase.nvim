@@ -17,6 +17,34 @@ M.win_ref = nil
 
 M.buf_refs = {}
 
+-- Query tests case classes
+local test_query = vim.treesitter.query.parse("python", [[
+    (class_definition 
+        name: (identifier) @class.name
+        (#match? @class.name "TestCase$")) @class.definition
+]])
+
+local test_method_query = vim.treesitter.query.parse("python", [[
+    (class_definition 
+        name: (identifier) @class.name
+        (#match? @class.name "TestCase$")
+        body: (block
+            [
+                (function_definition
+                    name: (identifier) @method.name
+                    (#match? @method.name "^test_")
+                )
+                (decorated_definition
+                    (function_definition
+                        name: (identifier) @method.name
+                        (#match? @method.name "^test_")
+                    )
+                )
+            ] @func.definition
+        )
+    ) 
+]])
+
 function M.is_python_project()
     local prj_files = { "pyproject.toml", "setup.cfg", "setup.py" }
     for _, file in ipairs(prj_files) do
@@ -90,28 +118,38 @@ function M.preferred_python()
     return vim.api.nvim_get_var("python3_host_prog")
 end
 
-function M.where_am_i(lines, row)
-    local where_am_i = ""
-    local class_name = ""
-    local method_name = ""
-    for i = #lines, 1, -1 do
-        local line = lines[i]
-        if line:match("[async ]?def test_") and method_name == "" then
-            method_name = line:gsub(
-                "^%s*async%s*", ""):gsub("^%s*def%s*", ""):gsub(
-                "%s*[(].*", "")
-        end
-        if line:match("^%s*class") and line:match("%w+TestCase") then
-            class_name = line:gsub(
-                "^%s*class%s*", ""):gsub("%s*[(].*", "")
-            break
+function M.where_am_i(buf)
+    if not vim.api.nvim_buf_is_valid(buf) or not vim.api.nvim_buf_is_loaded(buf) then
+        return {}
+    end
+    local parser = vim.treesitter.get_parser(buf, "python")
+    local tree = parser:parse()[1]
+    if not tree then
+        return {}
+    end
+    local cursor_pos = vim.api.nvim_win_get_cursor(0)
+    local row = cursor_pos[1] - 1
+    for _, match, _ in test_method_query:iter_matches(tree:root(), buf) do
+        local class_node = match[1] -- @class.name TSNode[1]
+        local method_node = match[2] -- @method.name TSNode[1]
+        local body_node = match[3] -- @func.body TSNode[1]
+        local start_row, _, end_row, _ = body_node:range()
+        if row >= start_row  and row <= end_row then
+            local class_name = vim.treesitter.get_node_text(class_node, buf)
+            local method_name = vim.treesitter.get_node_text(method_node, buf)
+            return class_name .. "." .. method_name
         end
     end
-    where_am_i = class_name
-    if method_name ~= "" then
-        where_am_i =  where_am_i .. "." .. method_name
+    for _, match, _ in test_query:iter_matches(tree:root(), buf) do
+        local class_node = match[1] -- @class.name TSNode[1]
+        local body_node = match[2] -- @func.body TSNode[1]
+        local start_row, _, end_row, _ = body_node:range()
+        if row >= start_row  and row <= end_row then
+            local class_name = vim.treesitter.get_node_text(class_node, buf)
+            return class_name
+        end
     end
-    return where_am_i
+    return ""
 end
 
 function M.get_current_module(file)
@@ -149,11 +187,9 @@ function M.run_file(file)
     local py_cmd = M.preferred_python()
     local py_args = ""
     if testing then
-        local row, _ = unpack(vim.api.nvim_win_get_cursor(0))
-        local lines = vim.api.nvim_buf_get_lines(0, 0, row, false)
         local current_module = M.get_current_module(file)
         local current_testing = current_module
-        local where_am_i = M.where_am_i(lines, row)
+        local where_am_i = M.where_am_i(buf)
         chase.buf_append(chase_buf, {
             "Current module: " .. current_module,
         })

@@ -1,6 +1,4 @@
 local chase = require("chase")
-local Log = chase.log
-local Path = require("plenary.path")
 
 local M = {}
 
