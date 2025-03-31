@@ -21,10 +21,9 @@ local test_query = vim.treesitter.query.parse("go", [[
                     (qualified_type
                         package: (package_identifier) @pkg
                         name: (type_identifier) @type))))
-        body: (block) @body
         (#match? @func.name "^Test")
         (#eq? @pkg "testing")
-        (#eq? @type "T"))
+        (#eq? @type "T")) @func.def
 ]])
 
 -- Query for t.Run subtests
@@ -45,7 +44,7 @@ local subtest_query = vim.treesitter.query.parse("go", [[
                             (qualified_type
                                 package: (package_identifier) @pkg
                                 name: (type_identifier) @type))))
-                body: (block) @body))
+                )) @call_exp
         (#eq? @pkg "testing")
         (#eq? @type "T"))
 ]])
@@ -211,7 +210,23 @@ function M.run_file(file)
                     data[i] = v:gsub("\r", "")
                 end
             end
-            chase.buf_append(chase_buf, data)
+            local filtered_data = {}
+            local no_tests_to_run = false
+            for _, line in ipairs(data) do
+                if string.match(line, "no tests to run") then
+                    no_tests_to_run = true
+                end
+                if not string.match(line, "no test") and not string.match(line, "%(cached%)") then
+                    if no_tests_to_run and line == "PASS" then
+                        no_tests_to_run = false
+                        goto continue
+                    end
+                    no_tests_to_run = false
+                    table.insert(filtered_data, line)
+                end
+                ::continue::
+            end
+            chase.buf_append(chase_buf, filtered_data)
         end,
         on_stderr = function(_, data)
             chase.buf_append(chase_buf, data)
