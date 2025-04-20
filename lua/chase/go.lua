@@ -63,6 +63,9 @@ function M.tests_in_buffer(buf)
         return {}
     end
     local parser = vim.treesitter.get_parser(buf, "go")
+    if not parser then
+        return {}
+    end
     local tree = parser:parse()[1]
     if not tree then
         return {}
@@ -86,6 +89,9 @@ function M.where_am_i(buf)
         return {}
     end
     local parser = vim.treesitter.get_parser(buf, "go")
+    if not parser then
+        return {}
+    end
     local tree = parser:parse()[1]
     if not tree then
         return {}
@@ -95,7 +101,13 @@ function M.where_am_i(buf)
     local tests = {}
     for _, match, _ in test_query:iter_matches(tree:root(), buf) do
         local func_node = match[1] -- @func.name TSNode[1]
-        local body_node = match[4] -- @func.body TSNode[1]
+        local body_node = match[4] -- @func.body TSNode[4]
+        if type(func_node) == "table" then
+            func_node = func_node[1]
+        end
+        if type(body_node) == "table" then
+            body_node = body_node[1]
+        end
         local start_row, _, end_row, _ = body_node:range()
         if row >= start_row  and row <= end_row then
             local name = vim.treesitter.get_node_text(func_node, buf)
@@ -108,6 +120,12 @@ function M.where_am_i(buf)
     for _, match, _ in subtest_query:iter_matches(tree:root(), buf) do
         local func_node = match[3] -- @func.name TSNode
         local body_node = match[6] -- @func.body TSNode
+        if type(func_node) == "table" then
+            func_node = func_node[1]
+        end
+        if type(body_node) == "table" then
+            body_node = body_node[1]
+        end
         local start_row, _, end_row, _ = body_node:range()
         if row >= start_row  and row <= end_row then
             local name = vim.treesitter.get_node_text(func_node, buf)

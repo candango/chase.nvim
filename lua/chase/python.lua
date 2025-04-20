@@ -66,7 +66,7 @@ function M.buf_is_main(buf_number)
     return false
 end
 
--- M.buf_out_register(file, name, python
+-- M.buf_out_register(file, name, python)
 
 function M.on_python_save()
     local data = {
@@ -123,6 +123,9 @@ function M.where_am_i(buf)
         return {}
     end
     local parser = vim.treesitter.get_parser(buf, "python")
+    if not parser then
+        return {}
+    end
     local tree = parser:parse()[1]
     if not tree then
         return {}
@@ -133,6 +136,15 @@ function M.where_am_i(buf)
         local class_node = match[1] -- @class.name TSNode[1]
         local method_node = match[2] -- @method.name TSNode[1]
         local body_node = match[3] -- @func.body TSNode[1]
+        if type(class_node) == "table" then
+            class_node = class_node[1]
+        end
+        if type(method_node) == "table" then
+            method_node = method_node[1]
+        end
+        if type(body_node) == "table" then
+            body_node = body_node[1]
+        end
         local start_row, _, end_row, _ = body_node:range()
         if row >= start_row  and row <= end_row then
             local class_name = vim.treesitter.get_node_text(class_node, buf)
@@ -143,6 +155,12 @@ function M.where_am_i(buf)
     for _, match, _ in test_query:iter_matches(tree:root(), buf) do
         local class_node = match[1] -- @class.name TSNode[1]
         local body_node = match[2] -- @func.body TSNode[1]
+        if type(class_node) == "table" then
+            class_node = class_node[1]
+        end
+        if type(body_node) == "table" then
+            body_node = body_node[1]
+        end
         local start_row, _, end_row, _ = body_node:range()
         if row >= start_row  and row <= end_row then
             local class_name = vim.treesitter.get_node_text(class_node, buf)
