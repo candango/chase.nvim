@@ -255,11 +255,6 @@ function M.on_vim_start()
     M.setup_project_virtualenv()
 end
 
-vim.api.nvim_create_autocmd("VimEnter", {
-    callback = M.on_vim_start,
-    group = chase.group,
-})
-
 function M.setup()
     M.setup_called = true
 

@@ -1,4 +1,5 @@
 local Data = require("chase.data")
+local async = require("plenary.async")
 local Path = require("plenary.path")
 local Log = require("plenary.log")
 
@@ -12,6 +13,7 @@ M.group = vim.api.nvim_create_augroup("CANDANGO_CHASE", { clear = true })
 M.sep = Path.path.sep
 M.user_home = Path:new(os.getenv("HOME"))
 M.installed_python = "python"
+M.global_env_done = false
 
 if M.is_windows() then
     M.user_home = os.getenv("UserProfile")
@@ -394,6 +396,7 @@ function M.set_python_global(venv_path)
     M.install_package(venv_path, "pynvim")
     M.install_package(venv_path, "twine")
     M.install_package(venv_path, "wheel")
+    M.global_env_done = true
 end
 
 function M.install_package(venv_path, package, install)
@@ -423,12 +426,28 @@ function M.install_package(venv_path, package, install)
     })
 end
 
+function M.run_after_global_env(time, callback)
+    local max_attempts = 12
+    return async.void(function()
+        for _ = 1, max_attempts do
+            if M.global_env_done then
+                callback()
+                return
+            end
+            async.util.sleep(time)
+        end
+        M.log.error("unable to check if global python environment is done")
+    end)
+end
+
 vim.api.nvim_create_autocmd("VimEnter", {
     callback = function ()
         M.vim_did_enter = true
         M.setup_virtualenv("chase_global", M.set_python_global)
         if M.config.python.enabled then
-            require("chase.python").setup()
+            M.run_after_global_env(1000, (function()
+                require("chase.python").setup()
+            end))()
         end
         if M.config.go.enabled then
             require("chase.go").setup()
