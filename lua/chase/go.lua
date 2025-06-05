@@ -181,6 +181,7 @@ function M.run_file(file)
     })
 
     local go_args = "run"
+    local go_execution = M.go_bin
     if testing then
         -- local row, _ = unpack(vim.api.nvim_win_get_cursor(0))
         -- local lines = vim.api.nvim_buf_get_lines(0, 0, row, false)
@@ -204,6 +205,7 @@ function M.run_file(file)
             })
         end
         go_args = "test -v ./... -run='" .. where_am_i .. "'"
+        go_execution = "CGO_ENABLED=0 " .. M.go_bin ..  " clean -testcache && " .. go_execution
     end
 
     chase.buf_append(chase_buf, {
@@ -212,7 +214,7 @@ function M.run_file(file)
         "",
     })
 
-    local cmd_list = { M.go_bin, go_args }
+    local cmd_list = { go_execution, go_args }
     if not testing then
         cmd_list[#cmd_list+1] = file
     end
