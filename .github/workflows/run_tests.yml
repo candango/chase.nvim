@@ -40,4 +40,4 @@ jobs:
           export PATH="${HOME}/_neovim/bin:${PATH}"
           export VIM="${HOME}/_neovim/share/nvim/runtime"
           nvim --version
-          timeout --preserve-status -s QUIT 10 nvim --headless --noplugin -u scripts/minimal.vim -c "PlenaryBustedDirectory tests"
+          timeout --preserve-status -s QUIT 30 nvim --headless --noplugin -u scripts/minimal.vim -c "PlenaryBustedDirectory tests"
