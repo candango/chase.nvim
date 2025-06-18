@@ -15,12 +15,12 @@ describe("Chase Go", function()
     end)
 end)
 
-describe("Check where am I on a test relative to the buffer cursor", function()
+describe("Check in", function()
     local toplevel_test = vim.fn.join({
         vim.fn.getcwd(), "tests", "fixtures",
         "go", "go_project", "toplevel_test.go"
     }, chase.sep)
-    it(toplevel_test .. " is a go project", function()
+    it(toplevel_test .. " where am I relative to cursor", function()
         local buf, win = test.create_buffer_from_file(toplevel_test)
         if buf ~= nil or buf ~= 0 then
             local i = 1
