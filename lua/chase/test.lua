@@ -1,9 +1,10 @@
 local chase = require("chase")
 local Path = require("plenary.path")
-
+package.path = package.path .. ";" .. vim.fn.expand("./nvim-treesitter/lua/?.lua")
 package.path = package.path .. ";" .. vim.fn.expand("~/.local/share/nvim/lazy/nvim-treesitter/lua/?.lua")
 package.path = package.path .. ";" .. vim.fn.expand("~/.local/share/nvim/lazy/?.lua")
 package.path = package.path .. ";" .. vim.fn.expand("~/.local/share/nvim/lazy/?/init.lua")
+vim.opt.runtimepath:append(vim.fn.expand("./nvim-treesitter"))
 vim.opt.runtimepath:append(vim.fn.expand("~/.local/share/nvim/lazy/lazy.nvim"))
 vim.opt.runtimepath:append(vim.fn.expand("~/.local/share/nvim/lazy/nvim-treesitter"))
 vim.opt.runtimepath:append(vim.fn.expand("~/.local/share/nvim/lazy/plenary.nvim"))
