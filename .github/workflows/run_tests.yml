@@ -30,14 +30,18 @@ jobs:
           test -d "${HOME}/_neovim" || {
             mkdir -p "${HOME}/_neovim"
             mkdir -p "${HOME}/_plugins/plenary"
+            mkdir -p "${HOME}/_plugins/nvim-treesitter"
             mkdir -p "${HOME}/work/neovim/neovim/.deps/usr/lib/lua/5.1"
             curl -sL "https://github.com/neovim/neovim/releases/download/${{ matrix.rev }}" | tar xzf - --strip-components=1 -C "${HOME}/_neovim"
             curl -sL "https://github.com/nvim-lua/plenary.nvim/archive/refs/tags/v0.1.4.tar.gz" | tar xzf - --strip-components=1 -C "${HOME}/_plugins/plenary"
+            curl -sL "https://github.com/nvim-treesitter/nvim-treesitter/archive/refs/tags/v0.10.0.tar.gz" | tar xzf - --strip-components=1 -C "${HOME}/_plugins/nvim-treesitter"
             ln -s "${HOME}/_plugins/plenary/lua/plenary"
+            ln -s "${HOME}/_plugins/nvim-treesitter"
           }
       - name: Run tests
         run: |
           export PATH="${HOME}/_neovim/bin:${PATH}"
           export VIM="${HOME}/_neovim/share/nvim/runtime"
           nvim --version
-          nvim --headless --noplugin -u scripts/minimal.vim -c "PlenaryBustedDirectory tests"
+          nvim --headless --noplugin -u scripts/minimal.lua -c 'checkhealth treesitter' -c 'w! checkhealth.log | !cat checkhealth.log && rm checkhealth.log' -c 'qall!'
+          nvim --headless --noplugin -u scripts/minimal.lua -c "PlenaryBustedDirectory tests"
