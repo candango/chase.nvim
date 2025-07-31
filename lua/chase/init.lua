@@ -452,6 +452,7 @@ vim.api.nvim_create_autocmd("VimEnter", {
         if M.config.go.enabled then
             require("chase.go").setup()
         end
+        require("chase.lua").setup()
     end,
     group = M.group,
 })
