@@ -218,7 +218,16 @@ function M.buf_show(buf)
     local win = vim.fn.bufwinid(buf)
     local cur_win = vim.api.nvim_get_current_win()
     if win == -1 then
-        vim.cmd("botright vsplit")
+        local ok = true
+        -- handle when user is closing the chase buffer directly as the the
+        -- states are not correct chase will try to reopen the window
+        ok = pcall(function() vim.cmd("botright vsplit") end)
+        if not ok then
+            -- destroying the buffer and set the state correctly
+            -- return to avoid reopening the buffer
+            M.chase_buf_destroy(buf)
+            return
+        end
         win = vim.api.nvim_get_current_win()
     end
     -- set buf to current window
@@ -247,16 +256,21 @@ function M.destroy_my_chase(buf)
     end
 end
 
-function M.chase_buf_destroy(chase_buf)
-    local buf = vim.api.nvim_buf_get_var(chase_buf, "original_buf")
+function M.chase_clear_buf_ref(original_buf)
     local buf_refs = {}
     for buf_ref, buf_chase in pairs(M.buf_refs) do
-        if buf_ref ~= buf then
+        if buf_ref ~= original_buf then
             buf_refs[buf_ref] = buf_chase
         end
     end
     M.buf_refs = buf_refs
-    vim.cmd("bd " .. chase_buf)
+end
+
+function M.chase_buf_destroy(chase_buf)
+    local buf = vim.api.nvim_buf_get_var(chase_buf, "original_buf")
+    M.chase_clear_buf_ref(buf)
+    -- using pcall to avoid errors if buffer is already closed
+    pcall(function() vim.cmd("bd " .. chase_buf) end)
 end
 
 function M.buf_clear(buf)
