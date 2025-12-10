@@ -14,6 +14,8 @@ M.sep = Path.path.sep
 M.user_home = Path:new(os.getenv("HOME"))
 M.installed_python = "python"
 M.global_env_done = false
+M.installed_uv = nil
+M.uv_installed = false
 
 if M.is_windows() then
     M.user_home = os.getenv("UserProfile")
@@ -355,6 +357,30 @@ function M.get_path(file_path, sep)
     return file_path:match("(.*"..sep..")")
 end
 
+function M.get_virtualenv_job(path)
+    if M.uv_installed  then
+        return { M.installed_uv, "venv", "--clear", path }
+    end
+    return {
+        M.installed_python,  "-m", "venv", "--clear",
+        "--upgrade-deps", path,
+    }
+end
+
+function M.check_uv()
+    vim.fn.jobstart(
+    { "which", "uv" },
+    {
+        stdout_buffered = true,
+        on_stdout = function(_, data)
+            if #data[1] > 0 then
+                M.uv_installed = true
+                M.installed_uv = data[1]
+            end
+        end,
+    })
+end
+
 function M.setup_virtualenv(venv_prefix, callback)
     local cwd_x = vim.fn.split(vim.fn.getcwd(), M.sep)
     venv_prefix = venv_prefix or cwd_x[#cwd_x]
@@ -366,10 +392,7 @@ function M.setup_virtualenv(venv_prefix, callback)
         M.log.warn("virtualenv for " .. venv_prefix .. " doesn't exists")
         M.log.warn("creating virtualenv for " .. venv_prefix)
         vim.fn.jobstart(
-        {
-            M.installed_python,  "-m", "venv", "--clear",
-            "--upgrade-deps", venv_path.filename,
-        },
+        M.get_virtualenv_job(venv_path.filename),
         {
             stdout_buffered = true,
             on_stdout = function(_, _)
@@ -413,10 +436,18 @@ function M.set_python_global(venv_path)
     M.global_env_done = true
 end
 
+function M.get_pip_command(cmd, package)
+    M.log.warn(M.uv_installed)
+    if M.uv_installed  then
+        return { M.installed_uv, "pip", cmd, package }
+    end
+    return { M.installed_python, "-m", "pip", cmd, package }
+end
+
 function M.install_package(venv_path, package, install)
     install = install or package
     vim.fn.jobstart(
-    { M.installed_python, "-m", "pip", "show", package },
+    M.get_pip_command("show", package),
     {
         stderr_buffered = true,
         on_stderr = function(_, data)
@@ -425,7 +456,7 @@ function M.install_package(venv_path, package, install)
                 "installing " .. package .. " at venv " .. venv_path.filename
                 )
                 vim.fn.jobstart(
-                { M.installed_python, "-m", "pip",  "install", package },
+                M.get_pip_command("install", package),
                 {
                     stdout_buffered = true,
                     on_stdout = function(_,_)
@@ -457,9 +488,10 @@ end
 vim.api.nvim_create_autocmd("VimEnter", {
     callback = function ()
         M.vim_did_enter = true
+        M.check_uv()
         M.setup_virtualenv("chase_global", M.set_python_global)
         if M.config.python.enabled then
-            M.run_after_global_env(1000, (function()
+            M.run_after_global_env(500, (function()
                 require("chase.python").setup()
             end))()
         end
