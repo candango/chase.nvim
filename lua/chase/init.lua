@@ -6,7 +6,7 @@ local Log = require("plenary.log")
 local M =  {}
 
 function M.is_windows()
-    return string.match(vim.loop.os_uname().sysname, "Windows") ~= nil
+    return string.match(vim.uv.os_uname().sysname, "Windows") ~= nil
 end
 
 M.group = vim.api.nvim_create_augroup("CANDANGO_CHASE", { clear = true })
@@ -128,10 +128,10 @@ function M.buf_open(name, buf, type)
         vim.cmd("botright vsplit " .. name)
         chase_buf = vim.api.nvim_get_current_buf()
         -- vim.opt_local.readonly = true
-        vim.api.nvim_buf_set_option(chase_buf, "readonly", true)
-        vim.api.nvim_buf_set_option(chase_buf, "buftype", "nowrite")
-        vim.api.nvim_buf_set_option(chase_buf, "filetype", type)
-        vim.api.nvim_buf_set_option(chase_buf, "buflisted", false)
+        vim.bo[buf].readonly = true
+        vim.bo[buf].buftype = "nowrite"
+        vim.bo[buf].filetype = type
+        vim.bo[buf].buflisted = false
         vim.api.nvim_buf_set_var(chase_buf, "original_buf", buf)
         vim.api.nvim_buf_set_keymap(chase_buf, "n", "<leader>q", "",
             {callback = function()
@@ -240,11 +240,11 @@ end
 function M.buf_hide(buf)
     local win = vim.fn.bufwinid(buf)
     if win > 0 then
-        local buftype = vim.api.nvim_buf_get_option(buf, "buftype")
-        vim.api.nvim_buf_set_option(buf, "buftype", "")
+        local buftype = vim.bo[buf].buftype
+        vim.bo[buf].buftype = ""
         vim.api.nvim_win_hide(win)
         if buftype then
-            vim.api.nvim_buf_set_option(buf, "buftype", buftype)
+            vim.bo[buf].buftype = buftype
         end
     end
 end
@@ -276,16 +276,16 @@ function M.chase_buf_destroy(chase_buf)
 end
 
 function M.buf_clear(buf)
-    vim.api.nvim_buf_set_option(buf, "buftype", "")
-    vim.api.nvim_buf_set_option(buf, "readonly", false)
+    vim.bo[buf].buftype = ""
+    vim.bo[buf].readonly = false
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, {})
-    vim.api.nvim_buf_set_option(buf, "readonly", true)
-    vim.api.nvim_buf_set_option(buf, "buftype", "nowrite")
+    vim.bo[buf].readonly = true
+    vim.bo[buf].buftype = "nowrite"
 end
 
 function M.buf_append(buf, lines)
-    vim.api.nvim_buf_set_option(buf, "readonly", false)
-    vim.api.nvim_buf_set_option(buf, "buftype", "")
+    vim.bo[buf].readonly = true
+    vim.bo[buf].buftype = ""
     local line_count = #vim.api.nvim_buf_get_lines(buf, 0, -1, false)
     if line_count < 2 then
         local first_line = vim.api.nvim_buf_get_lines(buf, 0, -1, false)[1]
@@ -294,8 +294,8 @@ function M.buf_append(buf, lines)
         end
     end
     vim.api.nvim_buf_set_lines(buf, line_count, -1, false, lines)
-    vim.api.nvim_buf_set_option(buf, "readonly", true)
-    vim.api.nvim_buf_set_option(buf, "buftype", "nowrite")
+    vim.bo[buf].readonly = true
+    vim.bo[buf].buftype = "nowrite"
 end
 
 function M.setup(config)
@@ -487,6 +487,8 @@ end
 
 vim.api.nvim_create_autocmd("VimEnter", {
     callback = function ()
+        vim.cmd [[highlight! default link ChaseWindow NormalFloat]]
+        vim.cmd [[highlight! default link ChaseBorder FloatBorder]]
         M.vim_did_enter = true
         M.check_uv()
         M.setup_virtualenv("chase_global", M.set_python_global)
