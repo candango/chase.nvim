@@ -16,7 +16,7 @@ jobs:
           - os: ubuntu-22.04
             rev: v0.10.4/nvim-linux-x86_64.tar.gz
           - os: ubuntu-22.04
-            rev: v0.11.2/nvim-linux-x86_64.tar.gz
+            rev: v0.11.5/nvim-linux-x86_64.tar.gz
     steps:
       - uses: actions/checkout@v4
       - run: date +%F > todays-date
