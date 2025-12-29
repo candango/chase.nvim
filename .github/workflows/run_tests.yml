@@ -16,7 +16,7 @@ jobs:
           - os: ubuntu-22.04
             rev: v0.11.5/nvim-linux-x86_64.tar.gz
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - run: date +%F > todays-date
       - name: Restore cache for today's nightly.
         uses: actions/cache@v4
