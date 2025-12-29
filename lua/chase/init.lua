@@ -128,10 +128,10 @@ function M.buf_open(name, buf, type)
         vim.cmd("botright vsplit " .. name)
         chase_buf = vim.api.nvim_get_current_buf()
         -- vim.opt_local.readonly = true
-        vim.bo[buf].readonly = true
-        vim.bo[buf].buftype = "nowrite"
-        vim.bo[buf].filetype = type
-        vim.bo[buf].buflisted = false
+        vim.bo[chase_buf].readonly = true
+        vim.bo[chase_buf].buftype = "nowrite"
+        vim.bo[chase_buf].filetype = type
+        vim.bo[chase_buf].buflisted = false
         vim.api.nvim_buf_set_var(chase_buf, "original_buf", buf)
         vim.api.nvim_buf_set_keymap(chase_buf, "n", "<leader>q", "",
             {callback = function()
@@ -368,17 +368,11 @@ function M.get_virtualenv_job(path)
 end
 
 function M.check_uv()
-    vim.fn.jobstart(
-    { "which", "uv" },
-    {
-        stdout_buffered = true,
-        on_stdout = function(_, data)
-            if #data[1] > 0 then
-                M.uv_installed = true
-                M.installed_uv = data[1]
-            end
-        end,
-    })
+    local uv_exepath = vim.fn.exepath("uv")
+    if uv_exepath then
+        M.uv_installed = true
+        M.installed_uv = uv_exepath
+    end
 end
 
 function M.setup_virtualenv(venv_prefix, callback)
@@ -437,7 +431,6 @@ function M.set_python_global(venv_path)
 end
 
 function M.get_pip_command(cmd, package)
-    M.log.warn(M.uv_installed)
     if M.uv_installed  then
         return { M.installed_uv, "pip", cmd, package }
     end
