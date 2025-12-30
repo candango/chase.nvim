@@ -380,7 +380,7 @@ end
 
 function M.check_uv()
     local uv_exepath = vim.fn.exepath("uv")
-    if uv_exepath then
+    if #uv_exepath > 0 then
         M.uv_installed = true
         M.installed_uv = uv_exepath
     end
@@ -442,7 +442,7 @@ function M.set_python_global(venv_path)
 end
 
 function M.get_pip_command(cmd, package)
-    if M.uv_installed  then
+    if M.uv_installed then
         return { M.installed_uv, "pip", cmd, package }
     end
     return { M.installed_python, "-m", "pip", cmd, package }
@@ -453,14 +453,13 @@ function M.install_package(venv_path, package, install)
     vim.fn.jobstart(
     M.get_pip_command("show", package),
     {
-        stderr_buffered = true,
-        on_stderr = function(_, data)
-            if #data > 1 then
+        on_exit = function(_, code)
+            if code ~= 0 then
                 M.log.warn(
                 "installing " .. package .. " at venv " .. venv_path.filename
                 )
                 vim.fn.jobstart(
-                M.get_pip_command("install", package),
+                M.get_pip_command("install", install),
                 {
                     stdout_buffered = true,
                     on_stdout = function(_,_)
