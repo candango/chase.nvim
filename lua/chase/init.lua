@@ -249,6 +249,17 @@ function M.buf_hide(buf)
     end
 end
 
+function M.oppened_chase_buf_hide()
+    for _, chase_buf in pairs(M.buf_refs) do
+        if chase_buf and vim.api.nvim_buf_is_valid(chase_buf) then
+            local wins = vim.fn.win_findbuf(chase_buf)
+            if #wins > 0 then
+                M.buf_hide(chase_buf)
+            end
+        end
+    end
+end
+
 function M.destroy_my_chase(buf)
     for buf_ref, buf_chase in pairs(M.buf_refs) do
         if buf_ref == buf then
@@ -494,6 +505,15 @@ vim.api.nvim_create_autocmd("VimEnter", {
             require("chase.go").setup()
         end
         require("chase.lua").setup()
+    end,
+    group = M.group,
+})
+
+-- Hide chase buffers when netrw appears
+vim.api.nvim_create_autocmd("FileType", {
+    pattern = "netrw",
+    callback = function()
+        M.oppened_chase_buf_hide()
     end,
     group = M.group,
 })
