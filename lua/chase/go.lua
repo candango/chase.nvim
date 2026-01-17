@@ -100,8 +100,8 @@ function M.where_am_i(buf)
     local row = cursor_pos[1] - 1
     local tests = {}
     for _, match, _ in test_query:iter_matches(tree:root(), buf) do
-        local func_node = match[1] -- @func.name TSNode[1]
-        local body_node = match[4] -- @func.body TSNode[4]
+        local func_node = match[1] -- @func_node TSNode[1]
+        local body_node = match[4] -- @body_node TSNode[4]
         if type(func_node) == "table" then
             func_node = func_node[1]
         end
