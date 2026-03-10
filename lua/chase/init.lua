@@ -503,6 +503,7 @@ vim.api.nvim_create_autocmd("VimEnter", {
         if M.config.go.enabled then
             require("chase.go").setup()
         end
+        require("chase.zig").setup()
         require("chase.lua").setup()
         require("chase.java").setup()
     end,
