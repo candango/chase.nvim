@@ -504,6 +504,7 @@ vim.api.nvim_create_autocmd("VimEnter", {
             require("chase.go").setup()
         end
         require("chase.zig").setup()
+        require("chase.php").setup()
         require("chase.lua").setup()
         require("chase.java").setup()
     end,
