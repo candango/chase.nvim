@@ -113,6 +113,9 @@ end
 --- @param file string The absolute path to the file to run.
 function M.run_file(file)
     local buf = vim.api.nvim_get_current_buf()
+
+    local params = chase.buf_params[buf] or ""
+
     if chase.is_windows() then
         file = file:gsub("/", chase.sep)
     end
@@ -146,10 +149,19 @@ function M.run_file(file)
     chase.buf_append(chase_buf, {
         "Zig: " .. (M.zig_bin or "zig"),
         "Version: " .. (M.zig_version or "unknown"),
-        "",
     })
 
     local cmd_list = { M.zig_bin or "zig", zig_args, file }
+
+    if params ~= "" then
+       table.insert(cmd_list, "--")
+       table.insert(cmd_list, params)
+        chase.buf_append(chase_buf, {
+            "Params: " .. params,
+        })
+    end
+
+    chase.buf_append(chase_buf, { "" })
 
     vim.fn.jobstart(
     table.concat(cmd_list, " "),

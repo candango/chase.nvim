@@ -263,6 +263,28 @@ function M.buf_append(buf, lines)
     vim.bo[buf].buftype = "nowrite"
 end
 
+--- Open a prompt to add or edit parameters for the current buffer.
+--- @param buf number The buffer number to manage parameters for.
+function M.buf_params_edit(buf)
+    local current_params = M.buf_params[buf] or ""
+    vim.ui.input({
+        prompt = "Chase Params: ",
+        default = current_params,
+    }, function(input)
+        if input then
+            M.buf_params[buf] = input
+            M.log.info("Params updated for buffer " .. buf .. ": " .. input)
+        end
+    end)
+end
+
+--- Clear all parameters for the current buffer.
+--- @param buf number The buffer number to clear parameters for.
+function M.buf_params_clear(buf)
+    M.buf_params[buf] = nil
+    print("Chase: Params cleared for buffer " .. buf)
+end
+
 function M.setup(config)
     config = config or {}
     M.config = vim.tbl_deep_extend("force", M.config, config)
@@ -459,11 +481,20 @@ function M.setup_chaser(chaser)
             opts = { callback = function ()
                 chaser.run_file(vim.api.nvim_buf_get_name(0))
             end },
+        },{
+            mode = "n",
+            lhs = "<leader>ca",
+            opts = { callback = function () M.buf_params_edit(cur_buf) end },
         },
         {
             mode = "n",
             lhs = "<leader>cd",
             opts = { callback = function () M.destroy_my_chase(cur_buf) end },
+        },
+        {
+            mode = "n",
+            lhs = "<leader>cx",
+            opts = { callback = function () M.buf_params_clear(cur_buf) end },
         },
         {
             mode = "n",
