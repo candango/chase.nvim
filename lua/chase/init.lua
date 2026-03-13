@@ -51,6 +51,12 @@ M.log = Log.new({
 M.buf_refs = {}
 M.buf_win_refs = {}
 
+--- @type table<number, string>
+--- Map of buffer numbers to their respective execution parameters.
+--- Key: buffer number (integer)
+--- Value: parameter string (string)
+M.buf_params = {}
+
 function M.chase_it(opts)
     print(vim.inspect(opts.args))
 end
@@ -151,58 +157,6 @@ function M.on_buf_hidden()
         M.buf_hide(buf)
     end
 end
-
-function M.on_buf_enter(extra_keymaps)
-    extra_keymaps = extra_keymaps or {}
-    local cur_buf = vim.api.nvim_get_current_buf()
-    local keymaps = {
-        {
-            mode = "n",
-            lhs = "<leader>cd",
-            opts = { callback = function () M.destroy_my_chase(cur_buf) end },
-        },
-        {
-            mode = "n",
-            lhs = "<leader>q",
-            opts = { callback = function () M.destroy_my_chase(cur_buf) end },
-        },
-    }
-    for _, keymap in pairs(extra_keymaps) do
-        keymaps[#keymaps+1] = keymap
-    end
-    local found, _ = pcall(
-        vim.api.nvim_buf_get_var, cur_buf, "chase_keymaps_set")
-    if not found then
-        vim.api.nvim_buf_set_var(cur_buf, "chase_keymaps_set", true)
-        for _, keymap in pairs(keymaps) do
-            local mode = keymap["mode"]
-            local lhs = keymap["lhs"] or ""
-            local rhs = keymap["rhs"] or ""
-            local opts = keymap["opts"] or {}
-            vim.api.nvim_buf_set_keymap(cur_buf, mode, lhs, rhs, opts)
-        end
-    end
-    for buf, chase_buf in pairs(M.buf_refs) do
-        if buf ~= cur_buf then
-            M.buf_hide(chase_buf)
-        end
-        if buf == cur_buf then
-            if M.buf_is_hidden(chase_buf) then
-                M.buf_show(chase_buf)
-            end
-        end
-    end
-end
-
--- function M.on_buf_leave()
---     local cur_buf = vim.api.nvim_get_current_buf()
---     print("BufLeave" .. cur_buf)
--- end
---
--- function M.on_buf_unload()
---     local cur_buf = vim.api.nvim_get_current_buf()
---     print("BufUnload" .. cur_buf)
--- end
 
 function M.chase_buf_close(buf)
 
@@ -488,6 +442,96 @@ function M.run_after_global_env(time, callback)
     end)
 end
 
+--- @class ChaseRunner
+--- @field pattern string The file pattern to match (e.g., "*.php", "*.go").
+--- @field run_file fun(file: string) The function that executes the file or tests.
+--- @field is_project_valid? fun(): boolean (Optional) Logic to detect if the runner should be active.
+--- @field setup_project? fun() (Optional) Initialization logic for the runner.
+
+--- Handles buffer entry for a specific chaser, setting up all keymaps and managing visibility.
+--- @param chaser ChaseRunner The language-specific runner module to set up.
+function M.setup_chaser(chaser)
+    local cur_buf = vim.api.nvim_get_current_buf()
+    local keymaps = {
+        {
+            mode = "n",
+            lhs = "<leader>cc",
+            opts = { callback = function ()
+                chaser.run_file(vim.api.nvim_buf_get_name(0))
+            end },
+        },
+        {
+            mode = "n",
+            lhs = "<leader>cd",
+            opts = { callback = function () M.destroy_my_chase(cur_buf) end },
+        },
+        {
+            mode = "n",
+            lhs = "<leader>q",
+            opts = { callback = function () M.destroy_my_chase(cur_buf) end },
+        },
+    }
+    local found, _ = pcall(
+        vim.api.nvim_buf_get_var, cur_buf, "chase_keymaps_set")
+    if not found then
+        vim.api.nvim_buf_set_var(cur_buf, "chase_keymaps_set", true)
+        for _, keymap in pairs(keymaps) do
+            local mode = keymap["mode"]
+            local lhs = keymap["lhs"] or ""
+            local rhs = keymap["rhs"] or ""
+            local opts = keymap["opts"] or {}
+            vim.api.nvim_buf_set_keymap(cur_buf, mode, lhs, rhs, opts)
+        end
+    end
+    for buf, chase_buf in pairs(M.buf_refs) do
+        if buf ~= cur_buf then
+            M.buf_hide(chase_buf)
+        end
+        if buf == cur_buf then
+            if M.buf_is_hidden(chase_buf) then
+                M.buf_show(chase_buf)
+            end
+        end
+    end
+end
+
+--- Registers a new language runner (chaser).
+--- @param chaser ChaseRunner The chaser module to register.
+function M.register_chaser(chaser)
+    if not chaser.pattern then
+        M.log.error("Chaser registration failed: 'pattern' is required.")
+        return
+    end
+
+    if not chaser.run_file then
+        M.log.error("Chaser registration failed: 'run_file' is required.")
+        return
+    end
+
+    if chaser.is_project_valid and not chaser.is_project_valid() then
+        M.log.debug("Chaser for " .. chaser.pattern .. " skipped: not a valid project.")
+        return
+    end
+
+    if chaser.setup_project then
+        chaser.setup_project()
+    end
+
+    vim.api.nvim_create_autocmd("BufEnter", {
+        callback = function()
+            M.setup_chaser(chaser)
+        end,
+        pattern = chaser.pattern,
+        group = M.group,
+    })
+
+    vim.api.nvim_create_autocmd("BufHidden", {
+        callback = M.on_buf_hidden,
+        pattern = chaser.pattern,
+        group = M.group,
+    })
+end
+
 vim.api.nvim_create_autocmd("VimEnter", {
     callback = function ()
         vim.cmd [[highlight! default link ChaseWindow NormalFloat]]
@@ -497,16 +541,16 @@ vim.api.nvim_create_autocmd("VimEnter", {
         M.setup_virtualenv("chase_global", M.set_python_global)
         if M.config.python.enabled then
             M.run_after_global_env(500, (function()
-                require("chase.python").setup()
+                M.register_chaser(require("chase.python"))
             end))()
         end
         if M.config.go.enabled then
-            require("chase.go").setup()
+            M.register_chaser(require("chase.go"))
         end
-        require("chase.zig").setup()
-        require("chase.php").setup()
-        require("chase.lua").setup()
-        require("chase.java").setup()
+        M.register_chaser(require("chase.lua"))
+        M.register_chaser(require("chase.zig"))
+        M.register_chaser(require("chase.php"))
+        M.register_chaser(require("chase.java"))
     end,
     group = M.group,
 })

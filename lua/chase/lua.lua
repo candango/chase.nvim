@@ -1,14 +1,23 @@
 local chase = require("chase")
 
+--- @class ChaseLua : ChaseRunner
 local M = {}
 
+--- @type string
+--- Prefix for the output buffer name.
 M.buf_name_prefix = "ChaseLua: "
 
-M.setup_called = false
-M.vim_did_enter = false
-
+--- @type string
+--- The file pattern to match for Lua files.
 M.lua_version = nil
 
+--- @type string|nil
+--- Current LuaJIT version string.
+M.pattern = "*.lua"
+
+--- Executes the given Lua file using Neovim's embedded JIT.
+--- Redirects `print` output to the Chase buffer during execution.
+--- @param file string The absolute path to the Lua file to run.
 function M.run_file(file)
     local buf = vim.api.nvim_get_current_buf()
     if chase.is_windows() then
@@ -44,38 +53,9 @@ function M.run_file(file)
     print = original_print
 end
 
-function M.setup()
-    M.setup_called = true
-
-    M.setup_project_lua()
-
-    vim.api.nvim_create_autocmd("BufEnter", {
-        callback = function()
-            local keymaps = {
-                {
-                    mode = "n",
-                    lhs = "<leader>cc",
-                    opts = { callback = function ()
-                        M.run_file(vim.api.nvim_buf_get_name(0))
-                    end },
-                },
-            }
-            chase.on_buf_enter(keymaps)
-        end,
-        pattern = "*.lua",
-        group = chase.group,
-    })
-
-    vim.api.nvim_create_autocmd("BufHidden", {
-        callback = chase.on_buf_hidden,
-        pattern = "*.lua",
-        group = chase.group,
-    })
-end
-
-function M.setup_project_lua()
-    if M.setup_called then
+--- Initializes the Lua runner by capturing the JIT version.
+function M.setup_project()
         M.lua_version = jit.version
-    end
 end
+
 return M

@@ -1,15 +1,27 @@
 local chase = require("chase")
 
+--- @class ChaseGo : ChaseRunner
 local M = {}
 
+--- @type string
+--- Prefix for the output buffer name.
 M.buf_name_prefix = "ChaseGo: "
 
-M.setup_called = false
-M.vim_did_enter = false
-
+--- @type string|nil
+--- Path to the Go binary.
 M.go_bin = nil
+
+--- @type string|nil
+--- Architecture of the installed Go (e.g., amd64, arm64).
 M.go_arch = nil
+
+--- @type string|nil
+--- Current Go version string.
 M.go_version = nil
+
+--- @type string
+--- The file pattern to match for Go files.
+M.pattern = "*.go"
 
 -- Query for top-level tests
 local test_query = vim.treesitter.query.parse("go", [[
@@ -80,21 +92,24 @@ function M.tests_in_buffer(buf)
     return tests
 end
 
+--- Identifies the test or subtest under the cursor.
+--- @param buf number The buffer number to analyze.
+--- @return string filter A string suitable for `go test -run` (e.g., "^TestFoo$" or "^TestFoo$/^SubTest$").
 function M.where_am_i(buf)
     local all_tests = M.tests_in_buffer(buf)
     for i, nome in ipairs(all_tests) do
         all_tests[i] = "^" .. nome ..  "$"
     end
     if not vim.api.nvim_buf_is_valid(buf) or not vim.api.nvim_buf_is_loaded(buf) then
-        return {}
+        return ""
     end
     local parser = vim.treesitter.get_parser(buf, "go")
     if not parser then
-        return {}
+        return ""
     end
     local tree = parser:parse()[1]
     if not tree then
-        return {}
+        return ""
     end
     local cursor_pos = vim.api.nvim_win_get_cursor(0)
     local row = cursor_pos[1] - 1
@@ -139,6 +154,9 @@ function M.where_am_i(buf)
     return table.concat(tests, "/")
 end
 
+--- Checks if the buffer contains a main function.
+--- @param buf_number number The buffer number to check.
+--- @return boolean result True if `func main()` is found.
 function M.buf_is_main(buf_number)
     local lines = vim.api.nvim_buf_get_lines(buf_number, 0, -1, false)
     for _, line in ipairs(lines) do
@@ -150,13 +168,17 @@ function M.buf_is_main(buf_number)
     return false
 end
 
-function M.is_go_project()
+--- Validates if the current directory is a Go project.
+--- @return boolean result True if go.mod exists.
+function M.is_project_valid()
     if chase.project_root:joinpath("go.mod"):exists() then
         return true
     end
     return false
 end
 
+--- Runs the given Go file or tests within it.
+--- @param file string The absolute path to the file to run.
 function M.run_file(file)
     local buf = vim.api.nvim_get_current_buf()
     if chase.is_windows() then
@@ -254,64 +276,27 @@ function M.run_file(file)
     })
 end
 
-function M.setup()
-    M.setup_called = true
-
-    M.setup_project_go()
-
-    if M.is_go_project() then
-        vim.api.nvim_create_autocmd("BufEnter", {
-            callback = function()
-                local keymaps = {
-                    {
-                        mode = "n",
-                        lhs = "<leader>cc",
-                        opts = { callback = function ()
-                            M.run_file(vim.api.nvim_buf_get_name(0))
-                        end },
-                    },
-                }
-                chase.on_buf_enter(keymaps)
-            end,
-            pattern = "*.go",
-            group = chase.group,
-        })
-
-        vim.api.nvim_create_autocmd("BufHidden", {
-            callback = chase.on_buf_hidden,
-            pattern = "*.go",
-            group = chase.group,
-        })
-    end
-end
-
-function M.setup_project_go()
-
-    if M.setup_called then
-        if M.is_go_project() then
-            -- local cwd_x = vim.fn.split(vim.fn.getcwd(), chase.sep)
+--- Initializes the Go runner by detecting the binary and its version.
+function M.setup_project()
+    vim.fn.jobstart(
+    { "which", "go" },
+    {
+        stdout_buffered = true,
+        on_stdout = function(_, which_data)
+            M.go_bin = vim.fn.join(which_data, "")
             vim.fn.jobstart(
-            { "which", "go" },
+            { M.go_bin, "version" },
             {
                 stdout_buffered = true,
-                on_stdout = function(_, which_data)
-                    M.go_bin = vim.fn.join(which_data, "")
-                    vim.fn.jobstart(
-                    { M.go_bin, "version" },
-                    {
-                        stdout_buffered = true,
-                        on_stdout = function(_, version_data)
-                            local go_version = vim.fn.split(
-                                vim.fn.join(version_data, ""), "")
-                            M.go_arch = go_version[4]
-                            M.go_version = go_version[3]
-                        end,
-                    })
+                on_stdout = function(_, version_data)
+                    local go_version = vim.fn.split(
+                        vim.fn.join(version_data, ""), "")
+                    M.go_arch = go_version[4]
+                    M.go_version = go_version[3]
                 end,
             })
-        end
-    end
+        end,
+    })
 end
--- M.setup_called = true
--- M.setup_project_go()
+
 return M

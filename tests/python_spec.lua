@@ -5,7 +5,7 @@ local python = require("chase.python")
 describe("Chase Python", function()
     local path = vim.fn.getcwd()
     it(path .. " isn't a python project", function()
-        assert.are.False(python.is_python_project())
+        assert.are.False(python.is_project_valid())
     end)
     local projects = { "pyproject_toml", "setup_cfg", "setup_py"}
     for _, project in ipairs(projects) do
@@ -16,7 +16,7 @@ describe("Chase Python", function()
         )
         it(path .. " is a python project", function()
             test.setup_project(path)
-            assert.are.True(python.is_python_project())
+            assert.are.True(python.is_project_valid())
         end)
     end
 end)

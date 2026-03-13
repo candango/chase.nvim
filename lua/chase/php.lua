@@ -1,16 +1,27 @@
 local chase = require("chase")
 
---- @class ChasePHP
+--- @class ChasePHP : ChaseRunner
 local M = {}
 
+--- @type string
+--- Prefix for the output buffer name.
 M.buf_name_prefix = "ChasePHP: "
 
-M.setup_called = false
-M.vim_did_enter = false
-
+--- @type string
+--- Path to the PHP binary.
 M.php_bin = "php"
+
+--- @type string|nil
+--- Path to the PHPUnit binary.
 M.phpunit_bin = nil
+
+--- @type string|nil
+--- Current PHP version string.
 M.php_version = nil
+
+--- @type string
+--- The file pattern to match for PHP files.
+M.pattern = "*.php"
 
 -- Query for PHPUnit test classes and methods
 -- PHPUnit tests are classes extending TestCase with methods starting with 'test' or @test annotation
@@ -66,7 +77,7 @@ function M.where_am_i(buf)
                 -- In the query, method.def is the 5th capture
                 local method_def_node = match[5]
                 if type(method_def_node) == "table" then method_def_node = method_def_node[1] end
-                
+
                 if method_def_node and type(method_def_node) == "userdata" and method_def_node.range then
                     local start_row, _, end_row, _ = method_def_node:range()
                     if row >= start_row and row <= end_row then
@@ -88,10 +99,8 @@ function M.where_am_i(buf)
 end
 
 --- Checks if the current directory is a PHP project.
---- A PHP project is identified by composer.json, vendor/autoload.php, artisan or phpunit.xml.
----
---- @return boolean result True if it's a PHP project.
-function M.is_php_project()
+--- @return boolean result True if it's a valid PHP project.
+function M.is_project_valid()
     local prj_files = {
         "composer.json",
         "composer.lock",
@@ -122,10 +131,9 @@ function M.run_file(file)
         chase.project_root.filename .. chase.sep, ""
     )
     local chase_buf = chase.buf_chase(relative_file, buf)
-    
     local where_am_i = M.where_am_i(buf)
     local testing = where_am_i ~= "" or file:match("Test%.php$")
-    
+
     chase.buf_clear(chase_buf)
     local action = "Running "
     if testing then
@@ -164,7 +172,7 @@ function M.run_file(file)
             table.insert(paths, p)
         end
         table.insert(paths, chase.project_root.filename)
-        
+
         local include_path = table.concat(paths, sep)
         php_args = "-d include_path='" .. include_path .. "'"
 
@@ -211,87 +219,52 @@ function M.run_file(file)
     })
 end
 
---- Set up the PHP runner.
---- Registers autocommands for PHP files if it's a PHP project.
-function M.setup()
-    M.setup_called = true
-
-    M.setup_project_php()
-
-    if M.is_php_project() then
-        vim.api.nvim_create_autocmd("BufEnter", {
-            callback = function()
-                local keymaps = {
-                    {
-                        mode = "n",
-                        lhs = "<leader>cc",
-                        opts = { callback = function ()
-                            M.run_file(vim.api.nvim_buf_get_name(0))
-                        end },
-                    },
-                }
-                chase.on_buf_enter(keymaps)
-            end,
-            pattern = "*.php",
-            group = chase.group,
-        })
-
-        vim.api.nvim_create_autocmd("BufHidden", {
-            callback = chase.on_buf_hidden,
-            pattern = "*.php",
-            group = chase.group,
-        })
-    end
-end
-
 --- Detects PHP and PHPUnit binaries.
-function M.setup_project_php()
-    if M.setup_called then
-        -- Find PHP
+function M.setup_project()
+    -- Find PHP
+    vim.fn.jobstart(
+    { "which", "php" },
+    {
+        stdout_buffered = true,
+        on_stdout = function(_, data)
+            local bin = vim.fn.join(data, ""):gsub("\n", "")
+            if bin ~= "" then
+                M.php_bin = bin
+                vim.fn.jobstart(
+                { M.php_bin, "-v" },
+                {
+                    stdout_buffered = true,
+                    on_stdout = function(_, v_data)
+                        local first_line = v_data[1] or ""
+                        M.php_version = first_line:match("PHP ([%d%.]+)")
+                    end,
+                })
+            end
+        end,
+    })
+
+    -- Find PHPUnit (Local first, then global)
+    -- If vendor/autoload.php exists, we prioritize vendor/bin/phpunit
+    local vendor_dir = chase.project_root:joinpath("vendor")
+    local local_phpunit = vendor_dir:joinpath("bin", "phpunit")
+    local autoloader = vendor_dir:joinpath("autoload.php")
+
+    if autoloader:exists() and local_phpunit:exists() then
+        M.phpunit_bin = local_phpunit.filename
+    elseif local_phpunit:exists() then
+        M.phpunit_bin = local_phpunit.filename
+    else
         vim.fn.jobstart(
-        { "which", "php" },
+        { "which", "phpunit" },
         {
             stdout_buffered = true,
             on_stdout = function(_, data)
                 local bin = vim.fn.join(data, ""):gsub("\n", "")
                 if bin ~= "" then
-                    M.php_bin = bin
-                    vim.fn.jobstart(
-                    { M.php_bin, "-v" },
-                    {
-                        stdout_buffered = true,
-                        on_stdout = function(_, v_data)
-                            local first_line = v_data[1] or ""
-                            M.php_version = first_line:match("PHP ([%d%.]+)")
-                        end,
-                    })
+                    M.phpunit_bin = bin
                 end
             end,
         })
-
-        -- Find PHPUnit (Local first, then global)
-        -- If vendor/autoload.php exists, we prioritize vendor/bin/phpunit
-        local vendor_dir = chase.project_root:joinpath("vendor")
-        local local_phpunit = vendor_dir:joinpath("bin", "phpunit")
-        local autoloader = vendor_dir:joinpath("autoload.php")
-
-        if autoloader:exists() and local_phpunit:exists() then
-            M.phpunit_bin = local_phpunit.filename
-        elseif local_phpunit:exists() then
-            M.phpunit_bin = local_phpunit.filename
-        else
-            vim.fn.jobstart(
-            { "which", "phpunit" },
-            {
-                stdout_buffered = true,
-                on_stdout = function(_, data)
-                    local bin = vim.fn.join(data, ""):gsub("\n", "")
-                    if bin ~= "" then
-                        M.phpunit_bin = bin
-                    end
-                end,
-            })
-        end
     end
 end
 

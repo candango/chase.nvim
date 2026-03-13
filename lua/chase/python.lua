@@ -2,20 +2,20 @@ local chase = require("chase")
 local Log = chase.log
 local Path = require("plenary.path")
 
+--- @class ChasePython : ChaseRunner
 local M = {}
 
+--- @type string
+--- Prefix for the output buffer name.
 M.buf_name_prefix = "ChasePy: "
 
-M.buf_name_suffix = " P)"
-
-M.setup_called = false
-M.vim_did_enter = false
-
+--- @type string|nil
+--- Current Python version string.
 M.python_version = nil
 
-M.win_ref = nil
-
-M.buf_refs = {}
+--- @type string
+--- The file pattern to match for Python files.
+M.pattern = "*.py"
 
 -- Query tests case classes
 local test_query = vim.treesitter.query.parse("python", [[
@@ -45,16 +45,9 @@ local test_method_query = vim.treesitter.query.parse("python", [[
     ) 
 ]])
 
-function M.is_python_project()
-    local prj_files = { "pyproject.toml", "setup.cfg", "setup.py" }
-    for _, file in ipairs(prj_files) do
-        if chase.project_root:joinpath(file):exists() then
-            return true
-        end
-    end
-    return false
-end
-
+--- Checks if the buffer contains a main entry point.
+--- @param buf_number number The buffer number to check.
+--- @return boolean result True if `if __name__ == "__main__":` is found.
 function M.buf_is_main(buf_number)
     local lines = vim.api.nvim_buf_get_lines(buf_number, 0, -1, false)
     for _, line in ipairs(lines) do
@@ -66,8 +59,7 @@ function M.buf_is_main(buf_number)
     return false
 end
 
--- M.buf_out_register(file, name, python)
-
+--- Hook triggered after saving a Python file.
 function M.on_python_save()
     local data = {
         buf = tonumber(vim.fn.expand("<abuf>")),
@@ -83,26 +75,8 @@ function M.on_python_save()
     -- vim.api.nvim_create_buf(false, false)
 end
 
-function M.setup_project_virtualenv()
-    if M.setup_called and M.is_python_project() then
-        local cwd_x = vim.fn.split(vim.fn.getcwd(), chase.sep)
-        local venv_prefix = table.concat(cwd_x, "_", #cwd_x-1, #cwd_x)
-        chase.setup_virtualenv(venv_prefix, M.set_python)
-        vim.fn.jobstart(
-        { M.preferred_python(), "--version" },
-        {
-            stdout_buffered = true,
-            on_stdout = function(_, data)
-                local result = vim.fn.join(data, "")
-                M.python_version = vim.fn.split(result, " ")[2]
-                if chase.is_windows then
-                    M.python_version = M.python_version:gsub("\r", "")
-                end
-            end,
-        })
-    end
-end
-
+--- Returns the path to the preferred Python binary (Virtualenv or Host).
+--- @return string path The absolute path to the python executable.
 function M.preferred_python()
     if os.getenv("VIRTUAL_ENV") ~= nil then
         local bin_path = "bin"
@@ -118,17 +92,20 @@ function M.preferred_python()
     return vim.api.nvim_get_var("python3_host_prog")
 end
 
+--- Retrieves the test class or method under the cursor.
+--- @param buf number The buffer number to analyze.
+--- @return string location The "Class.method" or "Class" string for unittest filtering.
 function M.where_am_i(buf)
     if not vim.api.nvim_buf_is_valid(buf) or not vim.api.nvim_buf_is_loaded(buf) then
-        return {}
+        return ""
     end
     local parser = vim.treesitter.get_parser(buf, "python")
     if not parser then
-        return {}
+        return ""
     end
     local tree = parser:parse()[1]
     if not tree then
-        return {}
+        return ""
     end
     local cursor_pos = vim.api.nvim_win_get_cursor(0)
     local row = cursor_pos[1] - 1
@@ -170,6 +147,9 @@ function M.where_am_i(buf)
     return ""
 end
 
+--- Converts a file path to a Python module path.
+--- @param file string The absolute file path.
+--- @return string module The dot-separated module path.
 function M.get_current_module(file)
     local relative_path = file:gsub(chase.project_root.filename, "")
     if relative_path:sub(1,1) == chase.sep then
@@ -179,6 +159,8 @@ function M.get_current_module(file)
     return current_module
 end
 
+--- Runs the given Python file or tests within it using `unittest`.
+--- @param file string The absolute path to the file to run.
 function M.run_file(file)
     local buf = vim.api.nvim_get_current_buf()
     if chase.is_windows() then
@@ -251,47 +233,47 @@ function M.run_file(file)
     })
 end
 
-function M.on_vim_start()
-    M.setup_project_virtualenv()
+--- Initializes the Python runner by setting up the virtualenv and capturing
+--- the version.
+function M.setup_project()
+    local cwd_x = vim.fn.split(vim.fn.getcwd(), chase.sep)
+    local venv_prefix = table.concat(cwd_x, "_", #cwd_x-1, #cwd_x)
+    chase.setup_virtualenv(venv_prefix, M.set_python)
+
+    vim.fn.jobstart(
+    { M.preferred_python(), "--version" },
+    {
+        stdout_buffered = true,
+        on_stdout = function(_, data)
+            local result = vim.fn.join(data, "")
+            M.python_version = vim.fn.split(result, " ")[2]
+            if chase.is_windows then
+                M.python_version = M.python_version:gsub("\r", "")
+            end
+        end,
+    })
+
+    vim.api.nvim_create_autocmd("BufWritePost", {
+        callback = M.on_python_save,
+        pattern = M.pattern,
+        group = chase.group,
+    })
 end
 
-function M.setup()
-    M.setup_called = true
-
-    M.setup_project_virtualenv()
-
-    if M.is_python_project() then
-        vim.api.nvim_create_autocmd("BufWritePost", {
-            callback = M.on_python_save,
-            pattern = "*.py",
-            group = chase.group,
-        })
-
-        vim.api.nvim_create_autocmd("BufEnter", {
-            callback = function()
-                local keymaps = {
-                    {
-                        mode = "n",
-                        lhs = "<leader>cc",
-                        opts = { callback = function ()
-                            M.run_file(vim.api.nvim_buf_get_name(0))
-                        end },
-                    },
-                }
-                chase.on_buf_enter(keymaps)
-            end,
-            pattern = "*.py",
-            group = chase.group,
-        })
-
-        vim.api.nvim_create_autocmd("BufHidden", {
-            callback = chase.on_buf_hidden,
-            pattern = "*.py",
-            group = chase.group,
-        })
+--- Validates if the current directory is a Python project.
+--- @return boolean result True if pyproject.toml, setup.cfg or setup.py exists.
+function M.is_project_valid()
+    local prj_files = { "pyproject.toml", "setup.cfg", "setup.py" }
+    for _, file in ipairs(prj_files) do
+        if chase.project_root:joinpath(file):exists() then
+            return true
+        end
     end
+    return false
 end
 
+--- Configures the environment to use the detected virtualenv.
+--- @param venv_path any The plenary.path object pointing to the venv root.
 function M.set_python(venv_path)
     local venv_bin = venv_path:joinpath("bin")
     if chase.is_windows() then

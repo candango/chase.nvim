@@ -1,14 +1,22 @@
 local chase = require("chase")
 
---- @class ChaseZig
+--- @class ChaseZig : ChaseRunner
 local M = {}
 
+--- @type string
+--- Prefix for the output buffer name.
 M.buf_name_prefix = "ChaseZig: "
 
-M.setup_called = false
-M.vim_did_enter = false
+--- @type string
+--- The file pattern to match for Zig files.
+M.pattern = "*.zig"
 
+--- @type string|nil
+--- Path to the Zig binary.
 M.zig_bin = nil
+
+--- @type string|nil
+--- Current Zig version string.
 M.zig_version = nil
 
 -- Query for Zig tests
@@ -50,14 +58,14 @@ function M.tests_in_buffer(buf)
         table.insert(tests, name)
     end
     return tests
-    end
+end
 
-    --- Identifies the test case under the cursor.
-    --- Returns the test name or an empty string if not within a test block.
-    ---
-    --- @param buf number The buffer number to analyze.
-    --- @return string string The name of the test under the cursor.
-    function M.where_am_i(buf)
+--- Identifies the test case under the cursor.
+--- Returns the test name or an empty string if not within a test block.
+---
+--- @param buf number The buffer number to analyze.
+--- @return string string The name of the test under the cursor.
+function M.where_am_i(buf)
     if not test_query or not vim.api.nvim_buf_is_valid(buf) or not vim.api.nvim_buf_is_loaded(buf) then
         return ""
     end
@@ -87,11 +95,11 @@ function M.tests_in_buffer(buf)
         end
     end
     return ""
-    end--- Checks if the current directory is a Zig project.
---- A Zig project is identified by the presence of a `build.zig` file.
----
---- @return boolean result True if it's a Zig project.
-function M.is_zig_project()
+end
+
+--- Checks if the current directory is a Zig project.
+--- @return boolean result True if build.zig exists.
+function M.is_project_valid()
     if chase.project_root:joinpath("build.zig"):exists() then
         return true
     end
@@ -162,62 +170,27 @@ function M.run_file(file)
     })
 end
 
---- Set up the Zig runner.
---- Registers autocommands for Zig files if it's a Zig project.
-function M.setup()
-    M.setup_called = true
-
-    M.setup_project_zig()
-
-    if M.is_zig_project() then
-        vim.api.nvim_create_autocmd("BufEnter", {
-            callback = function()
-                local keymaps = {
-                    {
-                        mode = "n",
-                        lhs = "<leader>cc",
-                        opts = { callback = function ()
-                            M.run_file(vim.api.nvim_buf_get_name(0))
-                        end },
-                    },
-                }
-                chase.on_buf_enter(keymaps)
-            end,
-            pattern = "*.zig",
-            group = chase.group,
-        })
-
-        vim.api.nvim_create_autocmd("BufHidden", {
-            callback = chase.on_buf_hidden,
-            pattern = "*.zig",
-            group = chase.group,
-        })
-    end
-end
-
---- Finds the Zig binary and retrieves its version.
-function M.setup_project_zig()
-    if M.setup_called then
-        vim.fn.jobstart(
-        { "which", "zig" },
-        {
-            stdout_buffered = true,
-            on_stdout = function(_, which_data)
-                local bin = vim.fn.join(which_data, "")
-                if bin ~= "" then
-                    M.zig_bin = bin
-                    vim.fn.jobstart(
-                    { M.zig_bin, "version" },
-                    {
-                        stdout_buffered = true,
-                        on_stdout = function(_, version_data)
-                            M.zig_version = vim.fn.join(version_data, "")
-                        end,
-                    })
-                end
-            end,
-        })
-    end
+--- Initializes the Zig runner by detecting the binary and its version.
+function M.setup_project()
+    vim.fn.jobstart(
+    { "which", "zig" },
+    {
+        stdout_buffered = true,
+        on_stdout = function(_, which_data)
+            local bin = vim.fn.join(which_data, "")
+            if bin ~= "" then
+                M.zig_bin = bin
+                vim.fn.jobstart(
+                { M.zig_bin, "version" },
+                {
+                    stdout_buffered = true,
+                    on_stdout = function(_, version_data)
+                        M.zig_version = vim.fn.join(version_data, "")
+                    end,
+                })
+            end
+        end,
+    })
 end
 
 return M

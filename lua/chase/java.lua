@@ -1,15 +1,27 @@
 local chase = require("chase")
 
+--- @class ChaseJava : ChaseRunner
 local M = {}
 
+--- @type string
+--- Prefix for the output buffer name.
 M.buf_name_prefix = "ChaseJava: "
 
-M.setup_called = false
-M.vim_did_enter = false
-
+--- @type string|nil
+--- Path to the Java binary.
 M.java_bin = nil
+
+--- @type string|nil
+--- Current Java version string.
 M.java_version = nil
+
+--- @type string|nil
+--- Path to the Javac compiler binary.
 M.javac_bin = nil
+
+--- @type string
+--- The file pattern to match for Java files.
+M.pattern = "*.java"
 
 -- Query for JUnit test methods
 local test_query = vim.treesitter.query.parse("java", [[
@@ -23,6 +35,9 @@ local test_query = vim.treesitter.query.parse("java", [[
         name: (identifier) @method.name) @method.def
 ]])
 
+--- Retrieves test methods from the buffer using Tree-sitter.
+--- @param buf number The buffer number to analyze.
+--- @return table tests A list of test method names.
 function M.tests_in_buffer(buf)
     if not vim.api.nvim_buf_is_valid(buf) or not vim.api.nvim_buf_is_loaded(buf) then
         return {}
@@ -45,6 +60,9 @@ function M.tests_in_buffer(buf)
     return tests
 end
 
+--- Identifies the test class or method under the cursor.
+--- @param buf number The buffer number to analyze.
+--- @return string location The "Class#method" string for filtering.
 function M.where_am_i(buf)
     if not vim.api.nvim_buf_is_valid(buf) or not vim.api.nvim_buf_is_loaded(buf) then
         return ""
@@ -67,7 +85,7 @@ function M.where_am_i(buf)
         for id, node in pairs(match) do
             local capture_name = test_query.captures[id]
             if capture_name == "class.name" then
-                local start_row, _, end_row, _ = node:range()
+                local start_row, _, _, _ = node:range()
                 if row >= start_row then
                     current_class = vim.treesitter.get_node_text(node, buf)
                 end
@@ -88,6 +106,9 @@ function M.where_am_i(buf)
     return ""
 end
 
+--- Checks if the buffer contains a public static void main.
+--- @param buf_number number The buffer number to check.
+--- @return boolean result True if main is found.
 function M.buf_is_main(buf_number)
     local lines = vim.api.nvim_buf_get_lines(buf_number, 0, -1, false)
     for _, line in ipairs(lines) do
@@ -99,7 +120,9 @@ function M.buf_is_main(buf_number)
     return false
 end
 
-function M.is_java_project()
+--- Validates if the current directory is a Java project (Maven, Gradle, etc).
+--- @return boolean result True if build files exist.
+function M.is_project_valid()
     local project_files = { ".classpath", "pom.xml", "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts" }
     for _, file in ipairs(project_files) do
         if chase.project_root:joinpath(file):exists() then
@@ -109,6 +132,7 @@ function M.is_java_project()
     return false
 end
 
+--- Detects Java and Javac binaries and captures the version.
 function M.get_package_from_file(file)
     local f = io.open(file, "r")
     if not f then
@@ -125,11 +149,18 @@ function M.get_package_from_file(file)
     return ""
 end
 
+--- Extracts the Java class name from a file path (filename without extension).
+--- @param file string The path to the Java file.
+--- @return string basename The name of the class.
 function M.get_class_name(file)
     local basename = vim.fn.fnamemodify(file, ":t:r")
     return basename
 end
 
+--- Retrieves source and output directories from the .classpath file.
+--- Defaults to "src" and "build" if the file is missing or invalid.
+--- @return string src_dir The directory containing source files.
+--- @return string output_dir The directory for compiled class files.
 function M.get_classpath_dirs()
     local classpath_file = chase.project_root:joinpath(".classpath")
     local src_dir = "src"
@@ -158,6 +189,8 @@ function M.get_classpath_dirs()
     return src_dir, output_dir
 end
 
+--- Runs the given Java file or tests using Maven, Gradle or plain Javac.
+--- @param file string The absolute path to the file to run.
 function M.run_file(file)
     local buf = vim.api.nvim_get_current_buf()
     if chase.is_windows() then
@@ -282,67 +315,33 @@ function M.run_file(file)
     })
 end
 
-function M.setup()
-    M.setup_called = true
-
-    M.setup_project_java()
-
-    if M.is_java_project() then
-        vim.api.nvim_create_autocmd("BufEnter", {
-            callback = function()
-                local keymaps = {
-                    {
-                        mode = "n",
-                        lhs = "<leader>cc",
-                        opts = { callback = function ()
-                            M.run_file(vim.api.nvim_buf_get_name(0))
-                        end },
-                    },
-                }
-                chase.on_buf_enter(keymaps)
-            end,
-            pattern = "*.java",
-            group = chase.group,
-        })
-
-        vim.api.nvim_create_autocmd("BufHidden", {
-            callback = chase.on_buf_hidden,
-            pattern = "*.java",
-            group = chase.group,
-        })
-    end
-end
-
-function M.setup_project_java()
-    if M.setup_called then
-        if M.is_java_project() then
+--- Detects Java binaries.
+function M.setup_project()
+    vim.fn.jobstart(
+    { "which", "java" },
+    {
+        stdout_buffered = true,
+        on_stdout = function(_, which_data)
+            M.java_bin = vim.fn.join(which_data, ""):gsub("\n", "")
             vim.fn.jobstart(
-            { "which", "java" },
+            { M.java_bin, "-version" },
             {
-                stdout_buffered = true,
-                on_stdout = function(_, which_data)
-                    M.java_bin = vim.fn.join(which_data, "")
-                    vim.fn.jobstart(
-                    { M.java_bin, "-version" },
-                    {
-                        stderr_buffered = true,
-                        on_stderr = function(_, version_data)
-                            local version_line = version_data[1] or ""
-                            M.java_version = version_line:match("version \"(.-)\"") or version_line
-                        end,
-                    })
+                stderr_buffered = true,
+                on_stderr = function(_, version_data)
+                    local version_line = version_data[1] or ""
+                    M.java_version = version_line:match("version \"(.-)\"") or version_line
                 end,
             })
-            vim.fn.jobstart(
-            { "which", "javac" },
-            {
-                stdout_buffered = true,
-                on_stdout = function(_, which_data)
-                    M.javac_bin = vim.fn.join(which_data, "")
-                end,
-            })
-        end
-    end
+        end,
+    })
+    vim.fn.jobstart(
+    { "which", "javac" },
+    {
+        stdout_buffered = true,
+        on_stdout = function(_, which_data)
+            M.javac_bin = vim.fn.join(which_data, ""):gsub("\n", "")
+        end,
+    })
 end
 
 return M
