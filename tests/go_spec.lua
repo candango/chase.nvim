@@ -1,6 +1,6 @@
 local chase = require("chase")
 local test = require("chase.test")
-local go = require("chase.go")
+local go = require("chase.chasers.go")
 
 describe("Chase Go", function()
     local path = vim.fn.getcwd()
