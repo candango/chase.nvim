@@ -25,15 +25,7 @@ M.pattern = "*.php"
 
 -- Query for PHPUnit test classes and methods
 -- PHPUnit tests are classes extending TestCase with methods starting with 'test' or @test annotation
-local test_query = vim.treesitter.query.parse("php", [[
-    (class_declaration
-        name: (name) @class.name) @class.def
-    (method_declaration
-        (visibility_modifier) @vis
-        name: (name) @method.name
-        (#match? @method.name "^test")
-        (#eq? @vis "public")) @method.def
-]])
+local test_query = vim.treesitter.query.get("php", "phpunit_test")
 
 --- Retrieves the test class and method under the cursor.
 --- Returns a string "ClassName::methodName" or just "ClassName".

@@ -38,9 +38,9 @@ function M.run_file(file)
         chase.project_root.filename .. chase.sep, ""
     )
     local chase_buf = chase.buf_chase(relative_file, buf)
-    
+
     local testing = file:match("_spec%.lua$")
-    
+
     chase.buf_clear(chase_buf)
     local action = testing and "Testing " or "Running "
     chase.buf_append(chase_buf, {
@@ -52,7 +52,7 @@ function M.run_file(file)
         local plenary_root = find_plugin_root("plenary")
         local ts_root = find_plugin_root("nvim-treesitter")
         local chase_root = chase.project_root.filename
-        
+
         local rtp = chase_root
         if plenary_root then rtp = rtp .. "," .. plenary_root end
         if ts_root then rtp = rtp .. "," .. ts_root end

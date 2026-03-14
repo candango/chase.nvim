@@ -24,42 +24,10 @@ M.go_version = nil
 M.pattern = "*.go"
 
 -- Query for top-level tests
-local test_query = vim.treesitter.query.parse("go", [[
-    (function_declaration
-        name: (identifier) @func.name
-        parameters: (parameter_list
-            (parameter_declaration
-                type: (pointer_type
-                    (qualified_type
-                        package: (package_identifier) @pkg
-                        name: (type_identifier) @type))))
-        (#match? @func.name "^Test")
-        (#eq? @pkg "testing")
-        (#eq? @type "T")) @func.def
-]])
+local test_query = vim.treesitter.query.get("go", "top_level_test")
 
 -- Query for t.Run subtests
-local subtest_query = vim.treesitter.query.parse("go", [[
-    (call_expression
-        function: (selector_expression
-            operand: (identifier) @t
-            field: (field_identifier) @method
-            (#eq? @t "t")
-            (#eq? @method "Run"))
-        arguments: (argument_list
-            (interpreted_string_literal
-               (interpreted_string_literal_content) @subtest.name) 
-            (func_literal
-                parameters: (parameter_list
-                    (parameter_declaration
-                        type: (pointer_type
-                            (qualified_type
-                                package: (package_identifier) @pkg
-                                name: (type_identifier) @type))))
-                )) @call_exp
-        (#eq? @pkg "testing")
-        (#eq? @type "T"))
-]])
+local subtest_query = vim.treesitter.query.get("go", "subtest")
 
 --- Retrieves a table of top-level Go test function names from a buffer using
 --- Tree-sitter. Only includes functions matching the pattern

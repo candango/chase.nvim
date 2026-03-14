@@ -18,32 +18,9 @@ M.python_version = nil
 M.pattern = "*.py"
 
 -- Query tests case classes
-local test_query = vim.treesitter.query.parse("python", [[
-    (class_definition 
-        name: (identifier) @class.name
-        (#match? @class.name "TestCase$")) @class.definition
-]])
+local test_query = vim.treesitter.query.get("python", "test_case_class")
 
-local test_method_query = vim.treesitter.query.parse("python", [[
-    (class_definition 
-        name: (identifier) @class.name
-        (#match? @class.name "TestCase$")
-        body: (block
-            [
-                (function_definition
-                    name: (identifier) @method.name
-                    (#match? @method.name "^test_")
-                )
-                (decorated_definition
-                    (function_definition
-                        name: (identifier) @method.name
-                        (#match? @method.name "^test_")
-                    )
-                )
-            ] @func.definition
-        )
-    ) 
-]])
+local test_method_query = vim.treesitter.query.get("python", "test_case_func")
 
 --- Checks if the buffer contains a main entry point.
 --- @param buf_number number The buffer number to check.

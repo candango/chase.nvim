@@ -21,13 +21,7 @@ M.zig_version = nil
 
 -- Query for Zig tests
 -- Zig tests are defined as `test "description" { ... }`
-local test_query_string = [[
-    (test_declaration
-        (_) @test.name
-        (block) @test.body) @test.def
-]]
-
-local ok, test_query = pcall(vim.treesitter.query.parse, "zig", test_query_string)
+local ok, test_query = pcall(vim.treesitter.query.get, "zig", "test_def")
 if not ok then
     -- Fallback for older or different parsers
     test_query = nil

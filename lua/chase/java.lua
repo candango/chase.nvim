@@ -24,16 +24,7 @@ M.javac_bin = nil
 M.pattern = "*.java"
 
 -- Query for JUnit test methods
-local test_query = vim.treesitter.query.parse("java", [[
-    (class_declaration
-        name: (identifier) @class.name) @class.def
-    (method_declaration
-        (modifiers
-            (marker_annotation
-                name: (identifier) @annotation
-                (#eq? @annotation "Test")))
-        name: (identifier) @method.name) @method.def
-]])
+local test_query = vim.treesitter.query.get("java", "junit_test")
 
 --- Retrieves test methods from the buffer using Tree-sitter.
 --- @param buf number The buffer number to analyze.
