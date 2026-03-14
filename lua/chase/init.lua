@@ -572,16 +572,16 @@ vim.api.nvim_create_autocmd("VimEnter", {
         M.setup_virtualenv("chase_global", M.set_python_global)
         if M.config.python.enabled then
             M.run_after_global_env(500, (function()
-                M.register_chaser(require("chase.python"))
+                M.register_chaser(require("chase.chasers.python"))
             end))()
         end
         if M.config.go.enabled then
-            M.register_chaser(require("chase.go"))
+            M.register_chaser(require("chase.chasers.go"))
         end
-        M.register_chaser(require("chase.lua"))
-        M.register_chaser(require("chase.zig"))
-        M.register_chaser(require("chase.php"))
-        M.register_chaser(require("chase.java"))
+        M.register_chaser(require("chase.chasers.lua"))
+        M.register_chaser(require("chase.chasers.zig"))
+        M.register_chaser(require("chase.chasers.php"))
+        M.register_chaser(require("chase.chasers.java"))
     end,
     group = M.group,
 })

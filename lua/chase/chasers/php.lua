@@ -1,6 +1,6 @@
 local chase = require("chase")
 
---- @class ChasePHP : ChaseRunner
+--- @class ChasePHP : Chaser
 local M = {}
 
 --- @type string

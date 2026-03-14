@@ -2,7 +2,7 @@ local chase = require("chase")
 local Log = chase.log
 local Path = require("plenary.path")
 
---- @class ChasePython : ChaseRunner
+--- @class PythonChaser : Chaser
 local M = {}
 
 --- @type string

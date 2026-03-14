@@ -1,6 +1,6 @@
 local chase = require("chase")
 
---- @class ChaseZig : ChaseRunner
+--- @class ChaseZig : Chaser
 local M = {}
 
 --- @type string
