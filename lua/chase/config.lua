@@ -1,10 +1,15 @@
 local M =  {
 }
 
+--- @class ChaserConfig
+--- @field enabled? boolean
+--- @field module? string
+--- @field [string] any
+
 --- @class ChaseConfig
 --- @field global table Global plugin settings.
 --- @field ui table UI and buffer settings.
---- @field chasers table language-specific runner settings.
+--- @field chasers table<string, ChaserConfig> language-specific runner settings.
 M.defaults = {
     global = {
         log_level = os.getenv("CHASE_LOG_LEVEL") or "warn",

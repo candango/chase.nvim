@@ -556,28 +556,28 @@ vim.api.nvim_create_autocmd("VimEnter", {
         M.vim_did_enter = true
         M.check_uv()
         M.setup_virtualenv("chase_global", M.set_python_global)
-        if M.config.chasers.python.enabled then
-        Async.run(function()
-            local ok, err = Async.until_true(
-                function() return M.global_env_done end)
-            Async.scheduler()
-            if ok then
-                M.register_chaser(require("chase.chasers.python"))
+        for name, opts in pairs(M.config.chasers) do
+            if opts.enabled then
+                local module_path = opts.module or ("chase.chasers." .. name)
+                if name == "python" then
+                    Async.run(function()
+                        local ok, err = Async.until_true(
+                            function() return M.global_env_done end)
+                        Async.scheduler()
+                        if ok then
+                            M.register_chaser(require(module_path))
+                        end
+                        return ok, err
+                    end, function (success, err)
+                        if not success then
+                            M.log.error("Python registration failed: " .. err)
+                        end
+                    end)
+                else
+                    M.register_chaser(require(module_path))
+                end
             end
-            return ok, err
-        end, function (success, err)
-            if not success then
-                M.log.error("Python registration failed: " .. err)
-            end
-        end)
         end
-        if M.config.chasers.go.enabled then
-            M.register_chaser(require("chase.chasers.go"))
-        end
-        M.register_chaser(require("chase.chasers.lua"))
-        M.register_chaser(require("chase.chasers.zig"))
-        M.register_chaser(require("chase.chasers.php"))
-        M.register_chaser(require("chase.chasers.java"))
     end,
     group = M.group,
 })
