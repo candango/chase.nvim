@@ -249,7 +249,8 @@ function M.buf_clear(buf)
 end
 
 function M.buf_append(buf, lines)
-    vim.bo[buf].readonly = true
+    vim.bo[buf].readonly = false
+    vim.bo[buf].modifiable = true
     vim.bo[buf].buftype = ""
     local line_count = #vim.api.nvim_buf_get_lines(buf, 0, -1, false)
     if line_count < 2 then
@@ -260,6 +261,7 @@ function M.buf_append(buf, lines)
     end
     vim.api.nvim_buf_set_lines(buf, line_count, -1, false, lines)
     vim.bo[buf].readonly = true
+    vim.bo[buf].modifiable = false
     vim.bo[buf].buftype = "nowrite"
 end
 
@@ -322,7 +324,7 @@ function M.setup(config)
         if file == nil then
             return
         end
-        file:write(vim.json.encode(Config.config))
+        file:write(vim.json.encode(M.config))
         file:close()
     end
 
@@ -549,6 +551,29 @@ function M.register_chaser(chaser)
     })
 end
 
+--- Runs a shell command for a chaser and streams output to a buffer.
+--- @param cmd table|string The command to be executed.
+--- @param buf number The buffer where output will be appened.
+--- @param opts? table { on_stdout = func, on_stderr = func, on_exit = func }
+function M.run_command(cmd, buf, opts)
+    opts = opts or {}
+    local cmd_str = type(cmd) == "table" and table.concat(cmd, " ") or cmd
+
+    local default_on_stdout_stderr = function (_, data)
+        if data and (data[1] ~= "" or #data > 1) then
+            M.buf_append(buf, data)
+        end
+    end
+
+    return vim.fn.jobstart(cmd_str, {
+        stdout_buffered = false,
+        stderr_buffered = false,
+        on_stdout = opts.on_stdout or default_on_stdout_stderr,
+        on_stderr = opts.on_stderr or default_on_stdout_stderr,
+        on_exit = opts.on_exit,
+    })
+end
+
 vim.api.nvim_create_autocmd("VimEnter", {
     callback = function ()
         vim.cmd [[highlight! default link ChaseWindow NormalFloat]]
@@ -559,22 +584,25 @@ vim.api.nvim_create_autocmd("VimEnter", {
         for name, opts in pairs(M.config.chasers) do
             if opts.enabled then
                 local module_path = opts.module or ("chase.chasers." .. name)
-                if name == "python" then
-                    Async.run(function()
-                        local ok, err = Async.until_true(
-                            function() return M.global_env_done end)
-                        Async.scheduler()
-                        if ok then
-                            M.register_chaser(require(module_path))
-                        end
-                        return ok, err
-                    end, function (success, err)
-                        if not success then
-                            M.log.error("Python registration failed: " .. err)
-                        end
-                    end)
-                else
-                    M.register_chaser(require(module_path))
+                local ok, chaser = pcall(require, module_path)
+                if ok then
+                    if name == "python" then
+                        Async.run(function()
+                            local success, err = Async.until_true(
+                                function() return M.global_env_done end)
+                                Async.scheduler()
+                                if success then
+                                    M.register_chaser(chaser)
+                                end
+                                return success, err
+                            end, function (success, err)
+                            if not success then
+                                M.log.error("Python registration failed: " .. err)
+                            end
+                        end)
+                    else
+                        M.register_chaser(chaser)
+                    end
                 end
             end
         end
