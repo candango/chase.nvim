@@ -1,5 +1,5 @@
-local Data = require("chase.data")
-local async = require("plenary.async")
+local Config = require("chase.config")
+local Async = require("chase.async")
 local Path = require("plenary.path")
 local Log = require("plenary.log")
 
@@ -31,7 +31,7 @@ if not M.is_windows() then
 end
 
 M.user_config_dir = Path:new(vim.fn.stdpath("data"), "chase")
-M.config = Data.config
+M.config = Config.defaults
 M.user_config_projects_file = Path:new(M.user_config_dir, "projects")
 M.project_root = Path:new(vim.fn.getcwd())
 
@@ -322,7 +322,7 @@ function M.setup(config)
         if file == nil then
             return
         end
-        file:write(vim.json.encode(Data.config))
+        file:write(vim.json.encode(Config.config))
         file:close()
     end
 
@@ -366,7 +366,7 @@ function M.setup_virtualenv(venv_prefix, callback)
     local cwd_x = vim.fn.split(vim.fn.getcwd(), M.sep)
     venv_prefix = venv_prefix or cwd_x[#cwd_x]
     local venv_name = venv_prefix .. "_env"
-    local venv_root = Path:new(M.config.python.venvs_dir)
+    local venv_root = Path:new(M.config.chasers.python.venvs_dir)
     local venv_path = Path:new(venv_root, venv_name)
 
     if not venv_path:exists() then
@@ -450,28 +450,14 @@ function M.install_package(venv_path, package, install)
     })
 end
 
-function M.run_after_global_env(time, callback)
-    local max_attempts = 12
-    return async.void(function()
-        for _ = 1, max_attempts do
-            if M.global_env_done then
-                callback()
-                return
-            end
-            async.util.sleep(time)
-        end
-        M.log.error("unable to check if global python environment is done")
-    end)
-end
-
---- @class ChaseRunner
+--- @class Chaser
 --- @field pattern string The file pattern to match (e.g., "*.php", "*.go").
 --- @field run_file fun(file: string) The function that executes the file or tests.
 --- @field is_project_valid? fun(): boolean (Optional) Logic to detect if the runner should be active.
 --- @field setup_project? fun() (Optional) Initialization logic for the runner.
 
 --- Handles buffer entry for a specific chaser, setting up all keymaps and managing visibility.
---- @param chaser ChaseRunner The language-specific runner module to set up.
+--- @param chaser Chaser The language-specific runner module to set up.
 function M.setup_chaser(chaser)
     local cur_buf = vim.api.nvim_get_current_buf()
     local keymaps = {
@@ -527,7 +513,7 @@ function M.setup_chaser(chaser)
 end
 
 --- Registers a new language runner (chaser).
---- @param chaser ChaseRunner The chaser module to register.
+--- @param chaser Chaser The chaser module to register.
 function M.register_chaser(chaser)
     if not chaser.pattern then
         M.log.error("Chaser registration failed: 'pattern' is required.")
@@ -570,12 +556,22 @@ vim.api.nvim_create_autocmd("VimEnter", {
         M.vim_did_enter = true
         M.check_uv()
         M.setup_virtualenv("chase_global", M.set_python_global)
-        if M.config.python.enabled then
-            M.run_after_global_env(500, (function()
+        if M.config.chasers.python.enabled then
+        Async.run(function()
+            local ok, err = Async.until_true(
+                function() return M.global_env_done end)
+            Async.scheduler()
+            if ok then
                 M.register_chaser(require("chase.chasers.python"))
-            end))()
+            end
+            return ok, err
+        end, function (success, err)
+            if not success then
+                M.log.error("Python registration failed: " .. err)
+            end
+        end)
         end
-        if M.config.go.enabled then
+        if M.config.chasers.go.enabled then
             M.register_chaser(require("chase.chasers.go"))
         end
         M.register_chaser(require("chase.chasers.lua"))
