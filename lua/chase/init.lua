@@ -133,9 +133,8 @@ function M.buf_open(name, buf, type)
     if chase_buf == -1 or not M.buf_is_visible(chase_buf) then
         vim.cmd("botright vsplit " .. name)
         chase_buf = vim.api.nvim_get_current_buf()
-        -- vim.opt_local.readonly = true
-        vim.bo[chase_buf].readonly = true
-        vim.bo[chase_buf].buftype = "nowrite"
+        vim.bo[chase_buf].modifiable = true
+        vim.bo[chase_buf].buftype = "nofile"
         vim.bo[chase_buf].filetype = type
         vim.bo[chase_buf].buflisted = false
         vim.api.nvim_buf_set_var(chase_buf, "original_buf", buf)
@@ -241,28 +240,19 @@ function M.chase_buf_destroy(chase_buf)
 end
 
 function M.buf_clear(buf)
-    vim.bo[buf].buftype = ""
-    vim.bo[buf].readonly = false
+    vim.bo[buf].modifiable = true
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, {})
-    vim.bo[buf].readonly = true
-    vim.bo[buf].buftype = "nowrite"
+    vim.bo[buf].modifiable = false
 end
 
 function M.buf_append(buf, lines)
-    vim.bo[buf].readonly = false
     vim.bo[buf].modifiable = true
-    vim.bo[buf].buftype = ""
-    local line_count = #vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-    if line_count < 2 then
-        local first_line = vim.api.nvim_buf_get_lines(buf, 0, -1, false)[1]
-        if first_line == "" then
-            line_count = 0
-        end
+    local line_count = vim.api.nvim_buf_line_count(buf)
+    if line_count == 1 and vim.api.nvim_buf_get_lines(buf, 0, -1, false)[1] == "" then
+        line_count = 0
     end
     vim.api.nvim_buf_set_lines(buf, line_count, -1, false, lines)
-    vim.bo[buf].readonly = true
     vim.bo[buf].modifiable = false
-    vim.bo[buf].buftype = "nowrite"
 end
 
 --- Open a prompt to add or edit parameters for the current buffer.
