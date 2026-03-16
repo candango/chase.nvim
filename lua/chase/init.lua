@@ -348,7 +348,7 @@ end
 
 function M.get_virtualenv_job(path)
     if M.uv_installed  then
-        return { M.installed_uv, "venv", "--clear", path }
+        return { M.installed_uv, "venv", "--seed", "--clear", path }
     end
     return {
         M.installed_python,  "-m", "venv", "--clear",
@@ -379,10 +379,14 @@ function M.setup_virtualenv(venv_prefix, callback)
         {
             stdout_buffered = true,
             on_stdout = function(_, _)
-                M.log.warn("virtualenv " .. venv_prefix ..
-                " created successfully")
+                M.log.warn("virtualenv " .. venv_prefix .. " created successfully")
                 if callback ~= nil then
                     callback(venv_path)
+                end
+            end,
+            on_exit = function(_, exit_code)
+                if exit_code ~= 0 then
+                    M.log.error("Failed to create virtualenv for " .. venv_prefix .. " with error: " .. exit_code)
                 end
             end,
         })
