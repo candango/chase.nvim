@@ -10,7 +10,19 @@ function M.is_windows()
 end
 
 M.group = vim.api.nvim_create_augroup("CANDANGO_CHASE", { clear = true })
-M.sep = Path.path.sep
+M.sep = (function()
+  if jit then
+    local os = string.lower(jit.os)
+    if os ~= "windows" then
+      return "/"
+    else
+      return "\\"
+    end
+  else
+    return package.config:sub(1, 1)
+  end
+end)()
+
 M.user_home = Path:new(os.getenv("HOME"))
 M.installed_python = "python"
 M.global_env_done = false

@@ -21,5 +21,5 @@ vim.filetype.add {
 vim.o.swapfile = false
 vim.bo.swapfile = false
 
-vim.cmd(":TSUpdateSync go lua python")
+vim.cmd(":TSUpdateSync go lua python zig")
 vim.cmd(":sleep 3")

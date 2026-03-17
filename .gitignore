@@ -1,2 +1,6 @@
 nvim-treesitter
 plenary
+
+# Zig
+.zig-cache 
+zig-out

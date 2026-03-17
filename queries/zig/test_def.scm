@@ -1,3 +1,3 @@
 (test_declaration
-    (_) @test.name
+    (string (string_content) @test.name)?
     (block) @test.body) @test.def
