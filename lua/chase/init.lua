@@ -251,20 +251,72 @@ function M.chase_buf_destroy(chase_buf)
     pcall(function() vim.cmd("bd " .. chase_buf) end)
 end
 
+--- Clears all lines from the specified buffer.
+--- @param buf number The buffer number to clear.
 function M.buf_clear(buf)
     vim.bo[buf].modifiable = true
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, {})
     vim.bo[buf].modifiable = false
 end
 
+--- Appends complete lines to a buffer, ensuring they start on a new line.
+--- Ideal for headers, footers, and static messages.
+--- @param buf number The buffer number to append to.
+--- @param lines string[] A list of strings representing complete lines.
 function M.buf_append(buf, lines)
+    if not lines or #lines == 0 then return end
+    vim.bo[buf].modifiable = true
+
+    local line_count = vim.api.nvim_buf_line_count(buf)
+    local is_new = line_count == 1 and vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1] == ""
+
+    if is_new then
+        -- If it's a fresh buffer, don't leave an empty line at the top
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+    else
+        -- Append at the very end, which always creates new lines
+        vim.api.nvim_buf_set_lines(buf, -1, -1, false, lines)
+    end
+
+    vim.bo[buf].modifiable = false
+    M.buf_scroll(buf)
+end
+
+--- Scrolls all windows displaying the specified buffer to the last line.
+--- @param buf number The buffer number to scroll.
+function M.buf_scroll(buf)
+    local wins = vim.fn.win_findbuf(buf)
+    local line_count = vim.api.nvim_buf_line_count(buf)
+    for _, win in ipairs(wins) do
+        pcall(vim.api.nvim_win_set_cursor, win, { line_count, 0 })
+    end
+end
+
+--- Streams chunks into a buffer, welding incomplete lines together.
+--- Ideal for real-time process output where chunks might not end with a newline.
+--- @param buf number The buffer number to stream into.
+--- @param lines string[] The chunks to stream.
+function M.buf_stream(buf, lines)
+    if not lines or #lines == 0 then return end
     vim.bo[buf].modifiable = true
     local line_count = vim.api.nvim_buf_line_count(buf)
-    if line_count == 1 and vim.api.nvim_buf_get_lines(buf, 0, -1, false)[1] == "" then
-        line_count = 0
+    local last_line = vim.api.nvim_buf_get_lines(buf, line_count - 1, line_count, false)[1] or ""
+
+    if line_count == 1 and last_line == "" then
+        -- First chunk in a clean buffer
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+    elseif last_line ~= "" then
+        -- Join the first chunk of the new data to the last line of the buffer
+        local new_lines = { last_line .. lines[1] }
+        for i = 2, #lines do table.insert(new_lines, lines[i]) end
+        vim.api.nvim_buf_set_lines(buf, line_count - 1, line_count, false, new_lines)
+    else
+        -- Last line was empty (previous chunk ended with newline), append normally
+        vim.api.nvim_buf_set_lines(buf, line_count - 1, -1, false, lines)
     end
-    vim.api.nvim_buf_set_lines(buf, line_count, -1, false, lines)
+
     vim.bo[buf].modifiable = false
+    M.buf_scroll(buf)
 end
 
 --- Open a prompt to add or edit parameters for the current buffer.
@@ -563,15 +615,19 @@ end
 --- @param opts? table { on_stdout = func, on_stderr = func, on_exit = func }
 function M.run_command(cmd, buf, opts)
     opts = opts or {}
-    local cmd_str = type(cmd) == "table" and table.concat(cmd, " ") or cmd
 
     local default_on_stdout_stderr = function (_, data)
         if data and (data[1] ~= "" or #data > 1) then
-            M.buf_append(buf, data)
+            if M.is_windows() then
+                for i, v in ipairs(data) do
+                    data[i] = v:gsub("\r", "")
+                end
+            end
+            M.buf_stream(buf, data)
         end
     end
 
-    return vim.fn.jobstart(cmd_str, {
+    return vim.fn.jobstart(cmd, {
         stdout_buffered = false,
         stderr_buffered = false,
         on_stdout = opts.on_stdout or default_on_stdout_stderr,

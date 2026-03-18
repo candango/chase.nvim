@@ -71,27 +71,25 @@ function M.run_file(file)
             "-c", "qa!"
         }
 
-        vim.fn.jobstart(cmd, {
-            stdout_buffered = true,
-            stderr_buffered = true,
+        chase.run_command(cmd, chase_buf, {
             on_stdout = function(_, data)
-                if data then
+                if data and (data[1] ~= "" or #data > 1) then
                     for i, line in ipairs(data) do
                         line = line:gsub("\27%[[%d;]*m", "")
                         line = line:gsub("\r", "")
                         data[i] = line
                     end
-                    chase.buf_append(chase_buf, data)
+                    chase.buf_stream(chase_buf, data)
                 end
             end,
             on_stderr = function(_, data)
-                if data then
+                if data and (data[1] ~= "" or #data > 1) then
                     for i, line in ipairs(data) do
                         line = line:gsub("\27%[[%d;]*m", "")
                         line = line:gsub("\r", "")
                         data[i] = line
                     end
-                    chase.buf_append(chase_buf, data)
+                    chase.buf_stream(chase_buf, data)
                 end
             end,
         })

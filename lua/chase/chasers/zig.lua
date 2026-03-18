@@ -202,21 +202,9 @@ function M.run_file(file)
         chase.buf_append(chase_buf, { "Params: " .. params })
     end
 
-    chase.buf_append(chase_buf, { "" })
+    chase.buf_append(chase_buf, { "", "" })
 
-    vim.fn.jobstart(table.concat(cmd_list, " "), {
-        stdout_buffered = true,
-        stderr_buffered = true,
-        on_stdout = function(_, data)
-            if chase.is_windows() then
-                for i, v in ipairs(data) do data[i] = v:gsub("\r", "") end
-            end
-            chase.buf_append(chase_buf, data)
-        end,
-        on_stderr = function(_, data)
-            chase.buf_append(chase_buf, data)
-        end,
-    })
+    chase.run_command(table.concat(cmd_list, " "), chase_buf)
 end
 
 --- Initializes the Zig runner by detecting the binary and its version.

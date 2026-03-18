@@ -202,6 +202,7 @@ function M.run_file(file)
         "Go: " .. M.go_bin,
         "Version: " .. M.go_version,
         "",
+        "",
     })
 
     local cmd_list = { go_execution, go_args }
@@ -209,11 +210,8 @@ function M.run_file(file)
         cmd_list[#cmd_list+1] = file
     end
 
-    vim.fn.jobstart(
-    table.concat(cmd_list, " "),
+    chase.run_command( table.concat(cmd_list, " "), chase_buf,
     {
-        stdout_buffered = true,
-        stderr_buffered = true,
         on_stdout = function(_, data)
             if chase.is_windows() then
                 for i, v in ipairs(data) do
@@ -236,10 +234,7 @@ function M.run_file(file)
                 end
                 ::continue::
             end
-            chase.buf_append(chase_buf, filtered_data)
-        end,
-        on_stderr = function(_, data)
-            chase.buf_append(chase_buf, data)
+            chase.buf_stream(chase_buf, filtered_data)
         end,
     })
 end
