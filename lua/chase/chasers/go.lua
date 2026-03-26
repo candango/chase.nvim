@@ -258,7 +258,23 @@ function M.setup_project()
                     M.go_version = go_version[3]
                 end,
             })
+            M.tidy_and_restart()
         end,
+    })
+end
+
+--- Runs `go mod tidy` and restarts LSPs.
+function M.tidy_and_restart()
+    chase.log.info("Running go mod tidy...")
+    vim.fn.jobstart({ M.go_bin or "go", "mod", "tidy" }, {
+        on_exit = function(_, code)
+            if code == 0 then
+                chase.log.info("go mod tidy complete. Restarting LSP...")
+                vim.cmd("LspRestart")
+            else
+                chase.log.error("go mod tidy failed with code " .. code)
+            end
+        end
     })
 end
 
