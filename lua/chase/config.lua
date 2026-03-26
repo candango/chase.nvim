@@ -1,5 +1,4 @@
-local M =  {
-}
+local M =  {}
 
 --- @class ChaserConfig
 --- @field enabled? boolean
@@ -19,6 +18,7 @@ M.defaults = {
         split_direction = "botright vsplit",
         width = nil, -- Uses default if nil
         auto_focus = false, -- Move cursor to Chase buffer on run
+        auto_scroll = false, -- Auto scroll Chase buffer to the last line
     },
     chasers = {
         go = {

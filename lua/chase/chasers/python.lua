@@ -17,10 +17,22 @@ M.python_version = nil
 --- The file pattern to match for Python files.
 M.pattern = "*.py"
 
--- Query tests case classes
-local test_query = vim.treesitter.query.get("python", "test_case_class")
+local _test_query = nil
+local _test_method_query = nil
 
-local test_method_query = vim.treesitter.query.get("python", "test_case_func")
+local function get_test_query()
+    if not _test_query then
+        _test_query = vim.treesitter.query.get("python", "test_case_class")
+    end
+    return _test_query
+end
+
+local function get_test_method_query()
+    if not _test_method_query then
+        _test_method_query = vim.treesitter.query.get("python", "test_case_func")
+    end
+    return _test_method_query
+end
 
 --- Checks if the buffer contains a main entry point.
 --- @param buf_number number The buffer number to check.
@@ -86,6 +98,8 @@ function M.where_am_i(buf)
     end
     local cursor_pos = vim.api.nvim_win_get_cursor(0)
     local row = cursor_pos[1] - 1
+    local test_method_query = get_test_method_query()
+    if not test_method_query then return "" end
     for _, match, _ in test_method_query:iter_matches(tree:root(), buf) do
         local class_node = match[1] -- @class.name TSNode[1]
         local method_node = match[2] -- @method.name TSNode[1]
@@ -106,6 +120,8 @@ function M.where_am_i(buf)
             return class_name .. "." .. method_name
         end
     end
+    local test_query = get_test_query()
+    if not test_query then return "" end
     for _, match, _ in test_query:iter_matches(tree:root(), buf) do
         local class_node = match[1] -- @class.name TSNode[1]
         local body_node = match[2] -- @func.body TSNode[1]
@@ -197,8 +213,12 @@ end
 --- Initializes the Python runner by setting up the virtualenv and capturing
 --- the version.
 function M.setup_project()
-    local cwd_x = vim.fn.split(vim.fn.getcwd(), chase.sep)
-    local venv_prefix = table.concat(cwd_x, "_", #cwd_x-1, #cwd_x)
+    local info = chase.get_project_info()
+    local venv_prefix = info.parent .. "_" .. info.project
+    if info.worktree then
+        venv_prefix = venv_prefix .. "_" .. info.worktree
+    end
+
     chase.setup_virtualenv(venv_prefix, M.set_python)
 
     vim.fn.jobstart(

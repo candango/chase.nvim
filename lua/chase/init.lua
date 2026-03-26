@@ -47,6 +47,60 @@ M.config = Config.defaults
 M.user_config_projects_file = Path:new(M.user_config_dir, "projects")
 M.project_root = Path:new(vim.fn.getcwd())
 
+--- Updates the project root and clears relevant state.
+--- @param new_root string|nil The new absolute path for the project root.
+function M.update_project_root(new_root)
+    new_root = new_root or vim.fn.getcwd()
+    M.project_root = Path:new(new_root)
+    M.log.info("Project root updated to: " .. M.project_root.filename)
+    -- Reset state that depends on the root
+    M.buf_params = {}
+end
+
+--- Retrieves Git project information for isolation.
+--- @return table info { root, parent, project, worktree }
+function M.get_project_info()
+    local root_list = vim.fn.systemlist("git rev-parse --show-toplevel")
+    local root = root_list[1]
+    if #root_list == 0 or not root or root == "" then
+        root = vim.fn.getcwd()
+        return {
+            root = root,
+            parent = vim.fn.fnamemodify(root, ":h:t"),
+            project = vim.fn.fnamemodify(root, ":t"),
+            worktree = nil,
+        }
+    end
+
+    local common_dir_list = vim.fn.systemlist("git rev-parse --git-common-dir")
+    local common_dir = common_dir_list[1]
+    local is_worktree = false
+    local worktree_name = nil
+
+    if common_dir and common_dir ~= "" and common_dir ~= ".git" and common_dir ~= root .. "/.git" then
+        -- It's a worktree if common-dir points elsewhere
+        is_worktree = true
+        worktree_name = vim.fn.fnamemodify(root, ":t")
+    end
+
+    local project_path = root
+    if is_worktree then
+        -- In a worktree, 'root' is the worktree path.
+        -- We want the project name to be the parent directory of the worktree if it's nested,
+        -- or we might need a better way to find the 'project' name.
+        -- Common pattern: project/ (main) and project/worktree-name
+        -- Or: project/.bare and project/master, project/feature-x
+        project_path = vim.fn.fnamemodify(root, ":h")
+    end
+
+    return {
+        root = root,
+        parent = vim.fn.fnamemodify(project_path, ":h:t"),
+        project = vim.fn.fnamemodify(project_path, ":t"),
+        worktree = worktree_name,
+    }
+end
+
 M.vim_did_enter = false
 
 M.python_buf_number = -1
@@ -636,38 +690,57 @@ function M.run_command(cmd, buf, opts)
     })
 end
 
+--- Triggers a full refresh of the project state, including root detection and chasers.
+function M.refresh()
+    M.update_project_root()
+    M.check_uv()
+    -- Global venv might need a refresh too if HOME changed, but usually static
+    -- M.setup_virtualenv("chase_global", M.set_python_global)
+
+    for name, opts in pairs(M.config.chasers) do
+        if opts.enabled then
+            local module_path = opts.module or ("chase.chasers." .. name)
+            -- Clear package from cache to allow re-registration if needed
+            package.loaded[module_path] = nil
+            local ok, chaser = pcall(require, module_path)
+            if ok then
+                if name == "python" then
+                    Async.run(function()
+                        local success, err = Async.until_true(
+                            function() return M.global_env_done end)
+                        Async.scheduler()
+                        if success then
+                            M.register_chaser(chaser)
+                        end
+                        return success, err
+                    end, function (success, err)
+                        if not success then
+                            M.log.error("Python registration failed: " .. err)
+                        end
+                    end)
+                else
+                    M.register_chaser(chaser)
+                end
+            end
+        end
+    end
+end
+
 vim.api.nvim_create_autocmd("VimEnter", {
     callback = function ()
         vim.cmd [[highlight! default link ChaseWindow NormalFloat]]
         vim.cmd [[highlight! default link ChaseBorder FloatBorder]]
         M.vim_did_enter = true
-        M.check_uv()
         M.setup_virtualenv("chase_global", M.set_python_global)
-        for name, opts in pairs(M.config.chasers) do
-            if opts.enabled then
-                local module_path = opts.module or ("chase.chasers." .. name)
-                local ok, chaser = pcall(require, module_path)
-                if ok then
-                    if name == "python" then
-                        Async.run(function()
-                            local success, err = Async.until_true(
-                                function() return M.global_env_done end)
-                                Async.scheduler()
-                                if success then
-                                    M.register_chaser(chaser)
-                                end
-                                return success, err
-                            end, function (success, err)
-                            if not success then
-                                M.log.error("Python registration failed: " .. err)
-                            end
-                        end)
-                    else
-                        M.register_chaser(chaser)
-                    end
-                end
-            end
-        end
+        M.refresh()
+    end,
+    group = M.group,
+})
+
+vim.api.nvim_create_autocmd("DirChanged", {
+    callback = function()
+        M.log.info("Directory changed, refreshing chase...")
+        M.refresh()
     end,
     group = M.group,
 })
