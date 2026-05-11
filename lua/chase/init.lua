@@ -116,6 +116,7 @@ M.log = Log.new({
 
 M.buf_refs = {}
 M.buf_win_refs = {}
+M.ns = vim.api.nvim_create_namespace("chase")
 
 --- @type table<number, string>
 --- Map of buffer numbers to their respective execution parameters.
@@ -344,6 +345,16 @@ function M.buf_scroll(buf)
     for _, win in ipairs(wins) do
         pcall(vim.api.nvim_win_set_cursor, win, { line_count, 0 })
     end
+end
+
+--- Applies a highlight group to a range of columns on a buffer line.
+--- @param buf number The buffer number.
+--- @param hl_group string The highlight group name.
+--- @param row number 0-indexed line number.
+--- @param col_start number 0-indexed start column.
+--- @param col_end number End column (-1 for end of line).
+function M.buf_add_highlight(buf, hl_group, row, col_start, col_end)
+    vim.api.nvim_buf_add_highlight(buf, M.ns, hl_group, row, col_start, col_end)
 end
 
 --- Streams chunks into a buffer, welding incomplete lines together.
@@ -730,6 +741,10 @@ vim.api.nvim_create_autocmd("VimEnter", {
     callback = function ()
         vim.cmd [[highlight! default link ChaseWindow NormalFloat]]
         vim.cmd [[highlight! default link ChaseBorder FloatBorder]]
+        vim.api.nvim_set_hl(0, "ChaseTitle",  { link = "Title",     default = true })
+        vim.api.nvim_set_hl(0, "ChaseAction", { link = "Keyword",   default = true })
+        vim.api.nvim_set_hl(0, "ChaseFile",   { link = "Directory", default = true })
+        vim.api.nvim_set_hl(0, "ChaseInfo",   { link = "Comment",   default = true })
         M.vim_did_enter = true
         M.setup_virtualenv("chase_global", M.set_python_global)
         M.refresh()

@@ -48,6 +48,10 @@ function M.run_file(file)
         action .. relative_file,
     })
 
+    chase.buf_add_highlight(chase_buf, "ChaseTitle",  0, 0, -1)
+    chase.buf_add_highlight(chase_buf, "ChaseAction", 1, 0, #action)
+    chase.buf_add_highlight(chase_buf, "ChaseFile",   1, #action, -1)
+
     if testing then
         local plenary_root = find_plugin_root("plenary")
         local ts_root = find_plugin_root("nvim-treesitter")
@@ -62,6 +66,9 @@ function M.run_file(file)
             "Version: " .. jit.version,
             "",
         })
+
+        chase.buf_add_highlight(chase_buf, "ChaseInfo", 2, 0, -1)
+        chase.buf_add_highlight(chase_buf, "ChaseInfo", 3, 0, -1)
 
         local cmd = {
             "nvim", "--headless", "--noplugin", "-u", "NONE",
