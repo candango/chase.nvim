@@ -149,6 +149,7 @@ end
 --- @param file string The absolute path to the file to run.
 function M.run_file(file)
     local buf = vim.api.nvim_get_current_buf()
+    local params = chase.buf_params[buf] or ""
     if chase.is_windows() then
         file = file:gsub("/", chase.sep)
     end
@@ -201,6 +202,13 @@ function M.run_file(file)
     chase.buf_append(chase_buf, {
         "Go: " .. M.go_bin,
         "Version: " .. M.go_version,
+    })
+
+    if params ~= "" then
+        chase.buf_append(chase_buf, { "Params: " .. params })
+    end
+
+    chase.buf_append(chase_buf, {
         "",
         "",
     })
@@ -208,6 +216,12 @@ function M.run_file(file)
     local cmd_list = { go_execution, go_args }
     if not testing then
         cmd_list[#cmd_list+1] = file
+        if params ~= "" then
+            cmd_list[#cmd_list+1] = params
+        end
+    elseif params ~= "" then
+        cmd_list[#cmd_list+1] = "--"
+        cmd_list[#cmd_list+1] = params
     end
 
     chase.run_command( table.concat(cmd_list, " "), chase_buf,
