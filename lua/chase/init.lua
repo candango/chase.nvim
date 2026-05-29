@@ -746,7 +746,11 @@ vim.api.nvim_create_autocmd("VimEnter", {
         vim.api.nvim_set_hl(0, "ChaseFile",   { link = "Directory", default = true })
         vim.api.nvim_set_hl(0, "ChaseInfo",   { link = "Comment",   default = true })
         M.vim_did_enter = true
-        M.setup_virtualenv("chase_global", M.set_python_global)
+        if M.config.chasers.python and M.config.chasers.python.enabled then
+            M.setup_virtualenv("chase_global", M.set_python_global)
+        else
+            M.global_env_done = true
+        end
         M.refresh()
     end,
     group = M.group,
