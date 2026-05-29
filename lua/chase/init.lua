@@ -496,16 +496,14 @@ function M.setup_virtualenv(venv_prefix, callback)
         vim.fn.jobstart(
         M.get_virtualenv_job(venv_path.filename),
         {
-            stdout_buffered = true,
-            on_stdout = function(_, _)
-                M.log.warn("virtualenv " .. venv_prefix .. " created successfully")
-                if callback ~= nil then
-                    callback(venv_path)
-                end
-            end,
             on_exit = function(_, exit_code)
                 if exit_code ~= 0 then
                     M.log.error("Failed to create virtualenv for " .. venv_prefix .. " with error: " .. exit_code)
+                    return
+                end
+                M.log.warn("virtualenv " .. venv_prefix .. " created successfully")
+                if callback ~= nil then
+                    callback(venv_path)
                 end
             end,
         })
@@ -562,12 +560,18 @@ function M.install_package(venv_path, package, install)
                 vim.fn.jobstart(
                 M.get_pip_command("install", install),
                 {
-                    stdout_buffered = true,
-                    on_stdout = function(_,_)
-                        M.log.warn(
-                        package .. " installed at " .. venv_path.filename ..
-                        " successfully"
-                        )
+                    on_exit = function(_, install_code)
+                        if install_code == 0 then
+                            M.log.warn(
+                            package .. " installed at " .. venv_path.filename ..
+                            " successfully"
+                            )
+                        else
+                            M.log.error(
+                            "Failed to install " .. package .. " at " ..
+                            venv_path.filename
+                            )
+                        end
                     end,
                 })
             end
