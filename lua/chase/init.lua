@@ -530,27 +530,45 @@ function M.set_python_global(venv_path)
         venv_bin = venv_path:joinpath("Scripts")
         venv_host_prog = venv_bin:joinpath("python.exe")
     end
-    -- local venv_activate = venv_bin:joinpath("activate")
     M.add_to_path(venv_bin)
     vim.cmd("let g:python3_host_prog='" .. venv_host_prog .. "'")
-    M.install_package(venv_path, "build", "build[virtualenv]")
-    M.install_package(venv_path, "pynvim")
-    M.install_package(venv_path, "twine")
-    M.install_package(venv_path, "wheel")
-    M.global_env_done = true
+
+    local global_packages = {
+        { name = "build", install = "build[virtualenv]" },
+        { name = "pynvim" },
+        { name = "twine" },
+        { name = "wheel" },
+    }
+    local pending = #global_packages
+    local function on_package_done()
+        pending = pending - 1
+        if pending == 0 then
+            M.log.warn("global python environment ready")
+            M.global_env_done = true
+        end
+    end
+    for _, pkg in ipairs(global_packages) do
+        M.install_package(venv_path, pkg.name, pkg.install, on_package_done)
+    end
 end
 
-function M.get_pip_command(cmd, package)
+function M.get_pip_command(cmd, package, venv_path)
     if M.uv_installed then
-        return { M.installed_uv, "pip", cmd, package }
+        local base = { M.installed_uv, "pip", cmd, package }
+        if venv_path then
+            -- pin uv to the target venv, ignoring any active VIRTUAL_ENV
+            table.insert(base, "--python")
+            table.insert(base, venv_path:joinpath("bin", M.installed_python).filename)
+        end
+        return base
     end
     return { M.installed_python, "-m", "pip", cmd, package }
 end
 
-function M.install_package(venv_path, package, install)
+function M.install_package(venv_path, package, install, on_done)
     install = install or package
     vim.fn.jobstart(
-    M.get_pip_command("show", package),
+    M.get_pip_command("show", package, venv_path),
     {
         on_exit = function(_, code)
             if code ~= 0 then
@@ -558,7 +576,7 @@ function M.install_package(venv_path, package, install)
                 "installing " .. package .. " at venv " .. venv_path.filename
                 )
                 vim.fn.jobstart(
-                M.get_pip_command("install", install),
+                M.get_pip_command("install", install, venv_path),
                 {
                     on_exit = function(_, install_code)
                         if install_code == 0 then
@@ -572,8 +590,11 @@ function M.install_package(venv_path, package, install)
                             venv_path.filename
                             )
                         end
+                        if on_done then on_done() end
                     end,
                 })
+            else
+                if on_done then on_done() end
             end
         end,
     })
