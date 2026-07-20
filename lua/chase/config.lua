@@ -40,6 +40,9 @@ M.defaults = {
         zig = {
             enabled = true,
         },
+        rust = {
+            enabled = true,
+        },
         java = {
             enabled = true,
         },
