@@ -78,7 +78,12 @@ function M.preferred_python()
             os.getenv("VIRTUAL_ENV"), bin_path, python
         ).filename
     end
-    return vim.api.nvim_get_var("python3_host_prog")
+    local host_python = vim.g.python3_host_prog
+    if host_python and host_python ~= "" then
+        return host_python
+    end
+
+    return vim.fn.exepath("python3") ~= "" and vim.fn.exepath("python3") or "python3"
 end
 
 --- Retrieves the test class or method under the cursor.
