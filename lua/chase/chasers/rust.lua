@@ -119,6 +119,14 @@ function M.is_project_valid()
     return #vim.fn.globpath(project_root, "**/Cargo.toml", false, true) > 0
 end
 
+local function relative_path(file, root)
+    local prefix = root .. chase.sep
+    if file:sub(1, #prefix) == prefix then
+        return file:sub(#prefix + 1)
+    end
+    return file
+end
+
 local function is_cargo_progress(line)
     return line:match("^%s*Finished `%w+` profile")
         or line:match("^%s*Running `")
@@ -128,10 +136,10 @@ end
 --- @param file string The absolute path to the Rust source file.
 function M.run_file(file)
     local buf = vim.api.nvim_get_current_buf()
-    local project_relative_file = file:gsub(chase.project_root.filename .. chase.sep, "")
+    local project_relative_file = relative_path(file, chase.project_root.filename)
     local manifest = M.find_manifest(file)
     local crate_root = manifest and vim.fn.fnamemodify(manifest, ":h") or chase.project_root.filename
-    local relative_file = file:gsub(crate_root .. chase.sep, "")
+    local relative_file = relative_path(file, crate_root)
     local integration_test = M.integration_test_name(relative_file)
     local testing = integration_test ~= nil or relative_file:match("_test%.rs$") ~= nil or M.buf_is_test(buf)
     local binary = not testing and M.binary_name(relative_file) or nil
