@@ -87,6 +87,11 @@ function M.is_project_valid()
     return #vim.fn.globpath(project_root, "**/Cargo.toml", false, true) > 0
 end
 
+local function is_cargo_progress(line)
+    return line:match("^%s*Finished `%w+` profile")
+        or line:match("^%s*Running `")
+end
+
 --- Runs a Rust binary or Cargo test target.
 --- @param file string The absolute path to the Rust source file.
 function M.run_file(file)
@@ -97,17 +102,9 @@ function M.run_file(file)
     local relative_file = file:gsub(crate_root .. chase.sep, "")
     local integration_test = M.integration_test_name(relative_file)
     local testing = integration_test ~= nil or relative_file:match("_test%.rs$") ~= nil or M.buf_is_test(buf)
-    local chase_buf = chase.buf_chase(project_relative_file, buf)
-
-    chase.buf_clear(chase_buf)
-    chase.buf_append(chase_buf, {
-        "Candango Chase",
-        (testing and "Testing " or "Running ") .. project_relative_file,
-        "Cargo: " .. M.cargo_bin,
-        "Version: " .. (M.cargo_version or "unknown"),
-    })
-
+    local binary = not testing and M.binary_name(relative_file) or nil
     local args = { M.cargo_bin, testing and "test" or "run" }
+
     if manifest then
         table.insert(args, "--manifest-path")
         table.insert(args, vim.fn.shellescape(manifest))
@@ -116,16 +113,46 @@ function M.run_file(file)
     if integration_test then
         table.insert(args, "--test")
         table.insert(args, vim.fn.shellescape(integration_test))
-    elseif not testing then
-        local binary = M.binary_name(relative_file)
-        if binary then
-            table.insert(args, "--bin")
-            table.insert(args, vim.fn.shellescape(binary))
-        end
+    elseif binary then
+        table.insert(args, "--bin")
+        table.insert(args, vim.fn.shellescape(binary))
     end
 
-    chase.buf_append(chase_buf, { "", "" })
-    chase.run_command(table.concat(args, " "), chase_buf)
+    local command = table.concat(args, " ")
+    local chase_buf = chase.buf_chase(project_relative_file, buf)
+
+    chase.buf_clear(chase_buf)
+    chase.buf_append(chase_buf, {
+        "Candango Chase",
+        (testing and "Testing " or "Running ") .. project_relative_file,
+        "Cargo: " .. M.cargo_bin,
+        "Version: " .. (M.cargo_version or "unknown"),
+        "Command: " .. command,
+        "Target: " .. (integration_test or binary or (testing and "all tests" or "default binary")),
+        "",
+    })
+
+    chase.run_command(command, chase_buf, {
+        on_stderr = function(_, data)
+            local output = {}
+            for _, line in ipairs(data or {}) do
+                if line ~= "" and not is_cargo_progress(line) then
+                    table.insert(output, line)
+                end
+            end
+            if #output > 0 then
+                chase.buf_stream(chase_buf, output)
+            end
+        end,
+        on_exit = function(_, code)
+            if code ~= 0 then
+                chase.buf_append(chase_buf, {
+                    "",
+                    "Exit: failed (code " .. code .. ")",
+                })
+            end
+        end,
+    })
 end
 
 --- Detects Cargo and captures its version.
