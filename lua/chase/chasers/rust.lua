@@ -130,6 +130,7 @@ function M.run_file(file)
         "Command: " .. command,
         "Target: " .. (integration_test or binary or (testing and "all tests" or "default binary")),
         "",
+        "",
     })
 
     chase.run_command(command, chase_buf, {
