@@ -21,7 +21,11 @@ describe("Chase Rust Project", function()
     end)
 
     it("resolves the default binary from src/main.rs", function()
+        local default = vim.fn.join({ fixtures, "default" }, chase.sep)
+        local manifest = vim.fn.join({ default, "Cargo.toml" }, chase.sep)
+
         assert.is_nil(rust.binary_name("src/main.rs"))
+        assert.are.equal("default-bin", rust.package_name(manifest))
     end)
 
     it("resolves a binary from src/bin", function()

@@ -76,6 +76,38 @@ function M.integration_test_name(relative_file)
     return relative_file:match("^tests[/\\]([^/\\]+)%.rs$")
 end
 
+--- Reads the package name used by Cargo for the default src/main.rs binary.
+--- @param manifest string|nil The Cargo.toml path.
+--- @return string|nil name The package name.
+function M.package_name(manifest)
+    if not manifest then
+        return nil
+    end
+
+    local file = io.open(manifest, "r")
+    if not file then
+        return nil
+    end
+
+    local in_package = false
+    for line in file:lines() do
+        if line:match("^%s*%[package%]%s*$") then
+            in_package = true
+        elseif in_package and line:match("^%s*%[") then
+            break
+        elseif in_package then
+            local name = line:match('^%s*name%s*=%s*["\']([^"\']+)["\']')
+            if name then
+                file:close()
+                return name
+            end
+        end
+    end
+
+    file:close()
+    return nil
+end
+
 --- Checks if the current directory contains a Cargo project or workspace.
 --- @return boolean result True when Cargo.toml exists at the project root.
 function M.is_project_valid()
@@ -103,6 +135,9 @@ function M.run_file(file)
     local integration_test = M.integration_test_name(relative_file)
     local testing = integration_test ~= nil or relative_file:match("_test%.rs$") ~= nil or M.buf_is_test(buf)
     local binary = not testing and M.binary_name(relative_file) or nil
+    if not testing and relative_file == "src" .. chase.sep .. "main.rs" then
+        binary = binary or M.package_name(manifest)
+    end
     local args = { M.cargo_bin, testing and "test" or "run" }
 
     if manifest then
