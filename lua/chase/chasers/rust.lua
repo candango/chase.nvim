@@ -128,7 +128,8 @@ local function relative_path(file, root)
 end
 
 local function is_cargo_progress(line)
-    return line:match("^%s*Finished `%w+` profile")
+    return line:match("^%s*Compiling ")
+        or line:match("^%s*Finished `%w+` profile")
         or line:match("^%s*Running `")
 end
 
