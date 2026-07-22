@@ -284,6 +284,15 @@ function M.tidy_and_restart()
         on_exit = function(_, code)
             if code == 0 then
                 chase.log.info("go mod tidy complete. Restarting LSP...")
+                local clients = vim.lsp.get_clients({ bufnr = 0 })
+                if #clients == 0 then
+                    chase.log.info("No LSP clients attached to current buffer")
+                    return
+                end
+                if vim.fn.has("nvim-0.12") == 1 then
+                    vim.cmd("lsp restart")
+                    return
+                end
                 vim.cmd("LspRestart")
             else
                 chase.log.error("go mod tidy failed with code " .. code)
