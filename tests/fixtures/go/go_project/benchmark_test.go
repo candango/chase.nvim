@@ -1,0 +1,8 @@
+package goproject
+
+import "testing"
+
+func BenchmarkTopLevel(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+	}
+}

@@ -24,6 +24,7 @@ M.defaults = {
         go = {
             enabled = true,
             test_args = { "-v", "./..." },
+            build_tags = {},
         },
         python = {
             enabled = true,

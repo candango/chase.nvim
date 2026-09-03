@@ -26,8 +26,49 @@ M.pattern = "*.go"
 -- Query for top-level tests
 local test_query = vim.treesitter.query.get("go", "top_level_test")
 
+-- Query for top-level benchmarks
+local benchmark_query = vim.treesitter.query.get("go", "top_level_benchmark")
+
 -- Query for t.Run subtests
 local subtest_query = vim.treesitter.query.get("go", "subtest")
+
+--- Returns the configured Go build tags as a comma-separated string.
+--- @return string tags The configured build tags.
+function M.get_build_tags()
+    local tags = chase.config.chasers.go.build_tags or {}
+    if type(tags) == "string" then
+        return tags
+    end
+    if type(tags) ~= "table" then
+        return ""
+    end
+    return table.concat(tags, ",")
+end
+
+--- Returns the shell-safe command-line argument for configured build tags.
+--- @return string argument The -tags argument, or an empty string.
+function M.get_build_tags_arg()
+    local tags = M.get_build_tags()
+    if tags == "" then
+        return ""
+    end
+    return vim.fn.shellescape("-tags=" .. tags)
+end
+
+--- Returns the package path containing a Go source file.
+--- @param file string The absolute path to the Go file.
+--- @return string package_path A package path relative to the project root.
+function M.get_package_path(file)
+    local package_dir = vim.fn.fnamemodify(file, ":h")
+    local relative_package = vim.fs.relpath(
+        chase.project_root.filename,
+        package_dir
+    )
+    if not relative_package or relative_package == "." then
+        return "."
+    end
+    return "./" .. relative_package:gsub("\\\\", "/")
+end
 
 --- Retrieves a table of top-level Go test function names from a buffer using
 --- Tree-sitter. Only includes functions matching the pattern
@@ -58,6 +99,107 @@ function M.tests_in_buffer(buf)
         end
     end
     return tests
+end
+
+--- Retrieves a table of top-level Go benchmark function names from a buffer.
+--- @param buf number The buffer number to analyze.
+--- @return table benchmarks A table of benchmark function names.
+function M.benchmarks_in_buffer(buf)
+    if not vim.api.nvim_buf_is_valid(buf) or not vim.api.nvim_buf_is_loaded(buf) then
+        return {}
+    end
+    local parser = vim.treesitter.get_parser(buf, "go")
+    if not parser then
+        return {}
+    end
+    local tree = parser:parse()[1]
+    if not tree then
+        return {}
+    end
+    local benchmarks = {}
+    for _, node, _ in benchmark_query:iter_captures(tree:root(), buf, 0, -1) do
+        local name = vim.treesitter.get_node_text(node, buf)
+        if name:match("^Benchmark") then
+            table.insert(benchmarks, name)
+        end
+    end
+    return benchmarks
+end
+
+--- Checks if the cursor is inside a top-level Go benchmark.
+--- @param buf number The buffer number to analyze.
+--- @return boolean result True when the cursor is inside a benchmark.
+function M.benchmark_under_cursor(buf)
+    if not vim.api.nvim_buf_is_valid(buf) or not vim.api.nvim_buf_is_loaded(buf) then
+        return false
+    end
+    local parser = vim.treesitter.get_parser(buf, "go")
+    if not parser then
+        return false
+    end
+    local tree = parser:parse()[1]
+    if not tree then
+        return false
+    end
+    local cursor_pos = vim.api.nvim_win_get_cursor(0)
+    local row = cursor_pos[1] - 1
+    for _, match, _ in benchmark_query:iter_matches(tree:root(), buf) do
+        local body_node = match[4]
+        if type(body_node) == "table" then
+            body_node = body_node[1]
+        end
+        local start_row, _, end_row, _ = body_node:range()
+        if row >= start_row and row <= end_row then
+            return true
+        end
+    end
+    return false
+end
+
+--- Identifies the benchmark under the cursor.
+--- @param buf number The buffer number to analyze.
+--- @return string filter A string suitable for go test -bench.
+function M.where_am_i_benchmark(buf)
+    local all_benchmarks = M.benchmarks_in_buffer(buf)
+    for i, name in ipairs(all_benchmarks) do
+        all_benchmarks[i] = "^" .. name .. "$"
+    end
+    if not vim.api.nvim_buf_is_valid(buf) or not vim.api.nvim_buf_is_loaded(buf) then
+        return ""
+    end
+    local parser = vim.treesitter.get_parser(buf, "go")
+    if not parser then
+        return ""
+    end
+    local tree = parser:parse()[1]
+    if not tree then
+        return ""
+    end
+    local cursor_pos = vim.api.nvim_win_get_cursor(0)
+    local row = cursor_pos[1] - 1
+    local benchmarks = {}
+    for _, match, _ in benchmark_query:iter_matches(tree:root(), buf) do
+        local func_node = match[1]
+        local body_node = match[4]
+        if type(func_node) == "table" then
+            func_node = func_node[1]
+        end
+        if type(body_node) == "table" then
+            body_node = body_node[1]
+        end
+        local start_row, _, end_row, _ = body_node:range()
+        if row >= start_row and row <= end_row then
+            local name = vim.treesitter.get_node_text(func_node, buf)
+            table.insert(benchmarks, name)
+        end
+    end
+    if #benchmarks == 0 then
+        return table.concat(all_benchmarks, "|")
+    end
+    for i, name in ipairs(benchmarks) do
+        benchmarks[i] = "^" .. name .. "$"
+    end
+    return table.concat(benchmarks, "|")
 end
 
 --- Identifies the test or subtest under the cursor.
@@ -145,7 +287,7 @@ function M.is_project_valid()
     return false
 end
 
---- Runs the given Go file or tests within it.
+--- Runs the package containing the given Go file or its tests.
 --- @param file string The absolute path to the file to run.
 function M.run_file(file)
     local buf = vim.api.nvim_get_current_buf()
@@ -161,9 +303,12 @@ function M.run_file(file)
     if not testing then
         testing = file:match("test_.*.go$")
     end
+    local benchmark = testing and M.benchmark_under_cursor(buf)
     chase.buf_clear(chase_buf)
     local action = "Running "
-    if testing then
+    if benchmark then
+        action = "Benchmarking "
+    elseif testing then
         action = "Testing "
     end
     chase.buf_append(chase_buf, {
@@ -171,7 +316,12 @@ function M.run_file(file)
         action .. relative_file,
     })
 
+    local build_tags_arg = M.get_build_tags_arg()
+    local package_path = M.get_package_path(file)
     local go_args = "run"
+    if build_tags_arg ~= "" then
+        go_args = go_args .. " " .. build_tags_arg
+    end
     local go_execution = M.go_bin
     if testing then
         -- local row, _ = unpack(vim.api.nvim_win_get_cursor(0))
@@ -189,13 +339,26 @@ function M.run_file(file)
         --     })
         -- end
 	    -- CGO_ENABLED=0 go clean -testcache && go test -v  ./...
-        local where_am_i  = M.where_am_i(buf)
+        local where_am_i
+        if benchmark then
+            where_am_i = M.where_am_i_benchmark(buf)
+        else
+            where_am_i = M.where_am_i(buf)
+        end
         if where_am_i ~= "" then
             chase.buf_append(chase_buf, {
                 "Location: " .. where_am_i,
             })
         end
-        go_args = "test -v ./... -run='" .. where_am_i .. "'"
+        go_args = "test"
+        if build_tags_arg ~= "" then
+            go_args = go_args .. " " .. build_tags_arg
+        end
+        if benchmark then
+            go_args = go_args .. " -v ./... -run='^$' -bench='" .. where_am_i .. "'"
+        else
+            go_args = go_args .. " -v ./... -run='" .. where_am_i .. "'"
+        end
         go_execution = "CGO_ENABLED=0 " .. M.go_bin ..  " clean -testcache && " .. go_execution
     end
 
@@ -203,6 +366,12 @@ function M.run_file(file)
         "Go: " .. M.go_bin,
         "Version: " .. M.go_version,
     })
+
+    if M.get_build_tags() ~= "" then
+        chase.buf_append(chase_buf, {
+            "Build tags: " .. M.get_build_tags(),
+        })
+    end
 
     if params ~= "" then
         chase.buf_append(chase_buf, { "Params: " .. params })
@@ -215,7 +384,7 @@ function M.run_file(file)
 
     local cmd_list = { go_execution, go_args }
     if not testing then
-        cmd_list[#cmd_list+1] = file
+        cmd_list[#cmd_list+1] = package_path
         if params ~= "" then
             cmd_list[#cmd_list+1] = params
         end
