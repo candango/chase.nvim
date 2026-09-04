@@ -84,7 +84,7 @@ describe("Benchmarks", function()
         assert.is_true(test.destroy_buffer(buf))
     end)
 
-    it("builds a benchmark command instead of a test command", function()
+    it("runs all benchmarks when the file has no tests", function()
         local buf, win = test.create_buffer_from_file(benchmark_file)
         assert.is_true(buf > 0)
 
@@ -98,7 +98,7 @@ describe("Benchmarks", function()
         go.go_bin = "go"
         go.go_version = "test"
 
-        vim.api.nvim_win_set_cursor(win, { 6, 0 })
+        vim.api.nvim_win_set_cursor(win, { 1, 0 })
         go.run_file(benchmark_file)
 
         chase.run_command = original_run_command

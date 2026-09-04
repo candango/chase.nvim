@@ -303,7 +303,13 @@ function M.run_file(file)
     if not testing then
         testing = file:match("test_.*.go$")
     end
-    local benchmark = testing and M.benchmark_under_cursor(buf)
+    local benchmark = false
+    if testing then
+        benchmark = M.benchmark_under_cursor(buf)
+        if not benchmark and #M.tests_in_buffer(buf) == 0 then
+            benchmark = #M.benchmarks_in_buffer(buf) > 0
+        end
+    end
     chase.buf_clear(chase_buf)
     local action = "Running "
     if benchmark then
