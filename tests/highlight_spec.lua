@@ -38,7 +38,7 @@ describe("Chase highlight groups", function()
     it("are defined as defaults", function()
         for _, name in ipairs({
             "ChaseTitle", "ChaseAction", "ChaseFile", "ChaseInfo",
-            "ChaseError", "ChaseWarning", "ChaseSuccess",
+            "ChaseError", "ChaseWarning", "ChaseSuccess", "ChaseLocation",
         }) do
             local hl = vim.api.nvim_get_hl(0, { name = name })
             assert.is_not_nil(hl.link, name .. " should link to a base group")

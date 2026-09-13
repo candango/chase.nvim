@@ -210,6 +210,13 @@ function M.buf_open(name, buf, type)
                 M.chase_buf_destroy(chase_buf)
             end}
         )
+        for _, lhs in ipairs({ "<CR>", "gd" }) do
+            vim.api.nvim_buf_set_keymap(chase_buf, "n", lhs, "",
+                {callback = function()
+                    M.buf_jump(chase_buf)
+                end, desc = "Chase: jump to the source location under the cursor"}
+            )
+        end
         vim.api.nvim_set_current_win(cur_win)
         M.buf_refs[buf] = chase_buf
         return chase_buf
@@ -399,10 +406,172 @@ M.output_patterns = {
     { pattern = "^Success:", group = "ChaseSuccess" },
     { pattern = "^Failed :", group = "ChaseError" },
     { pattern = "^Errors :", group = "ChaseError" },
+    -- compiler diagnostics: path:line:col: (zig, go build) and path:line: (javac)
+    { pattern = "^%S+:%d+:%d+: note:", group = "ChaseInfo" },
+    { pattern = "^%S+:%d+:%d+: warning:", group = "ChaseWarning" },
+    { pattern = "^%S+:%d+:%d+: ", group = "ChaseError" },
+    { pattern = "^%S+:%d+: error:", group = "ChaseError" },
+    { pattern = "^%S+:%d+: warning:", group = "ChaseWarning" },
     -- chase itself
     { pattern = "^Exit: failed", group = "ChaseError" },
     { pattern = "^Error:", group = "ChaseError" },
 }
+
+--- Ordered list of patterns that locate a source position inside an output
+--- line. Each pattern must capture the file, the line and optionally the
+--- column, in that order. The first match wins. Shared by the highlight
+--- scanner (underline) and by the <CR> jump in the Chase buffer.
+--- @type { pattern: string }[]
+M.location_patterns = {
+    -- python traceback: File "/x/y.py", line 12, in foo
+    { pattern = 'File "([^"]+)", line (%d+)' },
+    -- generic path:line[:col] (go, zig, rust, lua, php, java)
+    { pattern = "([%w%._/\\~%-]+%.%w+):(%d+):?(%d*)" },
+}
+
+--- @class ChaseLocation
+--- @field file string File as written in the output line.
+--- @field line number 1-indexed line.
+--- @field col number|nil 1-indexed column when present.
+--- @field col_start number 0-indexed start of the match in the text.
+--- @field col_end number Exclusive end of the match in the text.
+
+--- Extracts a source location from an output line.
+--- @param text string The line text.
+--- @return ChaseLocation|nil location Nil when no pattern matches.
+function M.parse_location(text)
+    for _, entry in ipairs(M.location_patterns) do
+        local col_start, col_end, file, line, col = text:find(entry.pattern)
+        if col_start then
+            if col == "" then
+                -- The optional column did not match, but the pattern may
+                -- have consumed a trailing separator: end after the line.
+                col_end = col_start - 1 + #file + 1 + #line
+            end
+            return {
+                file = file,
+                line = tonumber(line),
+                col = tonumber(col),
+                col_start = col_start - 1,
+                col_end = col_end,
+            }
+        end
+    end
+    return nil
+end
+
+--- Resolves a file named in process output to an absolute readable path.
+--- Tries, in order: the path as given when absolute, the hint directory,
+--- the project root, and finally a basename search under the project root
+--- preferring a hit inside the hint directory. Runners such as `go test`
+--- print package-relative basenames, so the search is not optional.
+--- @param file string The file as written in the output.
+--- @param hint_dir string|nil Directory of the buffer that started the run.
+--- @return string|nil path Absolute path or nil when nothing readable exists.
+function M.resolve_location_file(file, hint_dir)
+    local root = M.project_root and M.project_root.filename or vim.fn.getcwd()
+    local candidates = {}
+    if file:sub(1, 1) == "/" or file:match("^%a:[/\\]") then
+        table.insert(candidates, file)
+    else
+        if hint_dir then
+            table.insert(candidates, hint_dir .. M.sep .. file)
+        end
+        table.insert(candidates, root .. M.sep .. file)
+    end
+    for _, candidate in ipairs(candidates) do
+        if vim.fn.filereadable(candidate) == 1 then
+            return vim.fn.fnamemodify(candidate, ":p")
+        end
+    end
+
+    local name = vim.fn.fnamemodify(file, ":t")
+    local found = vim.fs.find(name, { path = root, type = "file", limit = 50 })
+    if #found == 0 then
+        return nil
+    end
+    if hint_dir then
+        for _, path in ipairs(found) do
+            if vim.fn.fnamemodify(path, ":h") == hint_dir then
+                return vim.fn.fnamemodify(path, ":p")
+            end
+        end
+    end
+    table.sort(found, function(a, b) return #a < #b end)
+    return vim.fn.fnamemodify(found[1], ":p")
+end
+
+--- Picks the window a jump should land in: the one showing the original
+--- buffer, else any non-floating window that is not the Chase buffer, else
+--- a new split to the left of the Chase window.
+--- @param chase_buf number The Chase buffer.
+--- @param original_buf number|nil The buffer that started the run.
+--- @return number win Window handle.
+function M.jump_target_window(chase_buf, original_buf)
+    if original_buf and vim.api.nvim_buf_is_valid(original_buf) then
+        local win = vim.fn.bufwinid(original_buf)
+        if win ~= -1 then
+            return win
+        end
+    end
+    for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+        local config = vim.api.nvim_win_get_config(win)
+        if vim.api.nvim_win_get_buf(win) ~= chase_buf and config.relative == "" then
+            return win
+        end
+    end
+    local chase_win = vim.fn.bufwinid(chase_buf)
+    if chase_win ~= -1 then
+        vim.api.nvim_set_current_win(chase_win)
+    end
+    vim.cmd("leftabove vsplit")
+    return vim.api.nvim_get_current_win()
+end
+
+--- Jumps from an output line to the source location it names.
+--- @param chase_buf number The Chase buffer the line belongs to.
+--- @param text string The output line text.
+--- @return boolean jumped True when a window now shows the location.
+function M.jump_to_location(chase_buf, text)
+    local location = M.parse_location(text)
+    if not location then
+        vim.notify("Chase: no source location on this line", vim.log.levels.WARN)
+        return false
+    end
+
+    local ok, original_buf = pcall(vim.api.nvim_buf_get_var, chase_buf, "original_buf")
+    if not ok then original_buf = nil end
+    local hint_dir = nil
+    if original_buf and vim.api.nvim_buf_is_valid(original_buf) then
+        local name = vim.api.nvim_buf_get_name(original_buf)
+        if name ~= "" then
+            hint_dir = vim.fn.fnamemodify(name, ":p:h")
+        end
+    end
+
+    local path = M.resolve_location_file(location.file, hint_dir)
+    if not path then
+        vim.notify("Chase: cannot find " .. location.file, vim.log.levels.WARN)
+        return false
+    end
+
+    local win = M.jump_target_window(chase_buf, original_buf)
+    vim.api.nvim_set_current_win(win)
+    vim.cmd("edit " .. vim.fn.fnameescape(path))
+    local line_count = vim.api.nvim_buf_line_count(0)
+    local row = math.max(1, math.min(location.line, line_count))
+    local col = math.max((location.col or 1) - 1, 0)
+    pcall(vim.api.nvim_win_set_cursor, win, { row, col })
+    return true
+end
+
+--- Keymap entry point: jumps from the line under the cursor in a Chase buffer.
+--- @param chase_buf number The Chase buffer.
+--- @return boolean jumped
+function M.buf_jump(chase_buf)
+    local text = vim.api.nvim_get_current_line()
+    return M.jump_to_location(chase_buf, text)
+end
 
 --- Resolves the highlight group for a process output line.
 --- @param line string The line text.
@@ -430,6 +599,12 @@ function M.buf_highlight_lines(buf, first_row, last_row)
         local group = M.output_group(line)
         if group then
             M.buf_add_highlight(buf, group, row, 0, -1)
+        end
+        local location = M.parse_location(line)
+        if location then
+            M.buf_add_highlight(
+                buf, "ChaseLocation", row, location.col_start, location.col_end
+            )
         end
     end
 end
@@ -868,6 +1043,7 @@ function M.setup_highlights()
     vim.api.nvim_set_hl(0, "ChaseError",   { link = "DiagnosticError", default = true })
     vim.api.nvim_set_hl(0, "ChaseWarning", { link = "DiagnosticWarn",  default = true })
     vim.api.nvim_set_hl(0, "ChaseSuccess", { link = "DiagnosticOk",    default = true })
+    vim.api.nvim_set_hl(0, "ChaseLocation", { link = "Underlined",     default = true })
 end
 
 M.setup_highlights()

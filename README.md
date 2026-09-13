@@ -67,6 +67,11 @@ The universal command for Chase is `<leader>cc`.
 - **Inside a test**: Chase will detect the test case under the cursor and run only that test.
 - **Outside a test**: Chase will run the entire file or the project main entry point.
 - **Toggle Buffer**: Use `<leader>q` to close the Chase output buffer.
+- **Jump to Source**: Press `<CR>` or `gd` on any output line that names a location
+  (`file.go:12`, `src/main.rs:4:5`, `File "x.py", line 12`, `Foo.java:12`)
+  to open that file in the window you started from, at the line and column.
+  Package-relative names printed by `go test` are resolved by searching the
+  project root.
 
 ## 🎨 Highlighting
 
@@ -83,7 +88,8 @@ so well-known lines such as `--- FAIL`, `ok`, `panic:`, `Traceback`,
 | `ChaseInfo` | `Comment` | Keys of header lines such as `Version:` or `Location:` |
 | `ChaseSuccess` | `DiagnosticOk` | Passing test summaries |
 | `ChaseWarning` | `DiagnosticWarn` | Compiler warnings |
-| `ChaseError` | `DiagnosticError` | Failures, panics, tracebacks and non-zero exits |
+| `ChaseError` | `DiagnosticError` | Failures, panics, tracebacks, compiler errors and non-zero exits |
+| `ChaseLocation` | `Underlined` | `file:line[:col]` spans that `<CR>` can jump to |
 
 All groups are defined with `default = true`, so a colorscheme or your own
 configuration can override them:
@@ -91,6 +97,9 @@ configuration can override them:
 ```lua
 vim.api.nvim_set_hl(0, "ChaseError", { fg = "#ff5555", bold = true })
 ```
+
+Compiler-style diagnostics (`path:line:col: error:`, `note:`, `warning:`)
+are colored as error, info and warning respectively.
 
 The output scanner is driven by `require("chase").output_patterns`, an
 ordered list of `{ pattern = <lua pattern>, group = <highlight group> }`
@@ -102,6 +111,11 @@ table.insert(require("chase").output_patterns, {
     pattern = "^SKIP", group = "ChaseWarning",
 })
 ```
+
+Jump targets come from `require("chase").location_patterns`, an ordered
+list of `{ pattern = <lua pattern> }` entries whose captures are, in order,
+the file, the line and an optional column. The same table drives the
+`ChaseLocation` underline.
 
 ## 📜 License
 
