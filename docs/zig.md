@@ -14,7 +14,11 @@ When you press `<leader>cc`:
 - **Inside a Test**:
   - Uses **Tree-sitter** to identify `test "description" { ... }` blocks.
   - Command: `zig test --test-filter "description" <file>`
-- **Outside a Test**:
+- **Outside a Test, in a test file**:
+  - A file is a test file when its name matches `test_*.zig` or
+    `*_test.zig`, or when it declares `test` blocks and no `pub fn main`.
+  - Command: `zig test <file>` (all tests in the file)
+- **Outside a Test, in a regular file**:
   - Command: `zig run <file>`
 
 ## ⚙️ Configuration

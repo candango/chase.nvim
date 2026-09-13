@@ -83,6 +83,38 @@ function M.where_am_i(buf)
     return nil
 end
 
+--- Checks whether a buffer declares a `pub fn main`.
+--- @param buf number The buffer number to scan.
+--- @return boolean result True when an entry point is declared.
+function M.has_main(buf)
+    if not vim.api.nvim_buf_is_valid(buf) then
+        return false
+    end
+    for _, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+        if line:match("^%s*pub%s+fn%s+main%s*%(") then
+            return true
+        end
+    end
+    return false
+end
+
+--- Decides whether a Zig file should run under `zig test` when the cursor
+--- is outside any test block. A file is a test file when its name follows
+--- `test_*.zig` or `*_test.zig`, or when it declares tests and no `main`.
+--- @param file string The absolute path to the file.
+--- @param buf number The buffer holding the file.
+--- @return boolean result True when the whole file should be tested.
+function M.is_test_file(file, buf)
+    local name = vim.fn.fnamemodify(file, ":t")
+    if name:match("^test_.*%.zig$") or name:match("_test%.zig$") then
+        return true
+    end
+    if #M.tests_in_buffer(buf) == 0 then
+        return false
+    end
+    return not M.has_main(buf)
+end
+
 --- Scans build.zig to find if the current file is a root source for an executable.
 --- @param file string The relative path of the file to search for.
 --- @return string|nil name The name of the artifact/bin if found in build.zig.
@@ -145,7 +177,7 @@ function M.run_file(file)
     local chase_buf = chase.buf_chase(relative_file, buf)
 
     local where_am_i = M.where_am_i(buf)
-    local testing = where_am_i ~= nil
+    local testing = where_am_i ~= nil or M.is_test_file(file, buf)
     local test_name = type(where_am_i) == "string" and where_am_i or nil
 
     local artifact_name = M.find_artifact_name(relative_file)
@@ -156,8 +188,10 @@ function M.run_file(file)
 
     if test_name then
         chase.buf_info(chase_buf, { "Filter: " .. test_name })
-    elseif testing then
+    elseif where_am_i then
         chase.buf_info(chase_buf, { "Mode: Anonymous Test" })
+    elseif testing then
+        chase.buf_info(chase_buf, { "Mode: All tests in file" })
     end
 
     chase.buf_info(chase_buf, {
