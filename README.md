@@ -68,6 +68,41 @@ The universal command for Chase is `<leader>cc`.
 - **Outside a test**: Chase will run the entire file or the project main entry point.
 - **Toggle Buffer**: Use `<leader>q` to close the Chase output buffer.
 
+## 🎨 Highlighting
+
+Every runner writes the same header to the Chase buffer and colors it with
+the groups below. Process output is scanned once per line as it streams in,
+so well-known lines such as `--- FAIL`, `ok`, `panic:`, `Traceback`,
+`test result: ok` or `error[E0308]` are colored without any redraw cost.
+
+| Group | Default link | Applied to |
+| :--- | :--- | :--- |
+| `ChaseTitle` | `Title` | The `Candango Chase` title line |
+| `ChaseAction` | `Keyword` | The action verb (`Running`, `Testing`, `Benchmarking`) |
+| `ChaseFile` | `Directory` | The file being chased |
+| `ChaseInfo` | `Comment` | Keys of header lines such as `Version:` or `Location:` |
+| `ChaseSuccess` | `DiagnosticOk` | Passing test summaries |
+| `ChaseWarning` | `DiagnosticWarn` | Compiler warnings |
+| `ChaseError` | `DiagnosticError` | Failures, panics, tracebacks and non-zero exits |
+
+All groups are defined with `default = true`, so a colorscheme or your own
+configuration can override them:
+
+```lua
+vim.api.nvim_set_hl(0, "ChaseError", { fg = "#ff5555", bold = true })
+```
+
+The output scanner is driven by `require("chase").output_patterns`, an
+ordered list of `{ pattern = <lua pattern>, group = <highlight group> }`
+entries where the first match wins. Append your own entries to color
+runner-specific lines:
+
+```lua
+table.insert(require("chase").output_patterns, {
+    pattern = "^SKIP", group = "ChaseWarning",
+})
+```
+
 ## 📜 License
 
 **Apache License V2.0**

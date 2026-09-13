@@ -166,9 +166,10 @@ function M.run_file(file)
     local chase_buf = chase.buf_chase(project_relative_file, buf)
 
     chase.buf_clear(chase_buf)
-    chase.buf_append(chase_buf, {
-        "Candango Chase",
-        (testing and "Testing " or "Running ") .. project_relative_file,
+    chase.buf_header(
+        chase_buf, testing and "Testing " or "Running ", project_relative_file
+    )
+    chase.buf_info(chase_buf, {
         "Cargo: " .. M.cargo_bin,
         "Version: " .. (M.cargo_version or "unknown"),
         "Command: " .. command,

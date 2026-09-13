@@ -177,10 +177,7 @@ function M.run_file(file)
     if testing then
         action = "Testing "
     end
-    chase.buf_append(chase_buf, {
-        "Candango Chase",
-        action .. relative_file,
-    })
+    chase.buf_header(chase_buf, action, relative_file)
 
     local py_cmd = M.preferred_python()
     local py_args = ""
@@ -188,19 +185,19 @@ function M.run_file(file)
         local current_module = M.get_current_module(file)
         local current_testing = current_module
         local where_am_i = M.where_am_i(buf)
-        chase.buf_append(chase_buf, {
+        chase.buf_info(chase_buf, {
             "Current module: " .. current_module,
         })
         if where_am_i ~= "" then
             current_testing = current_testing .. "." .. where_am_i
-            chase.buf_append(chase_buf, {
+            chase.buf_info(chase_buf, {
                 "Location: " .. where_am_i,
             })
         end
         py_args = "-m unittest -v " .. current_testing
     end
 
-    chase.buf_append(chase_buf, {
+    chase.buf_info(chase_buf, {
         "Python: " .. M.preferred_python(),
         "Version: " .. M.python_version,
         "",

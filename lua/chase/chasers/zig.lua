@@ -152,18 +152,15 @@ function M.run_file(file)
 
     chase.buf_clear(chase_buf)
     local action = testing and "Testing " or "Running "
-    chase.buf_append(chase_buf, {
-        "Candango Chase",
-        action .. relative_file,
-    })
+    chase.buf_header(chase_buf, action, relative_file)
 
     if test_name then
-        chase.buf_append(chase_buf, { "Filter: " .. test_name })
+        chase.buf_info(chase_buf, { "Filter: " .. test_name })
     elseif testing then
-        chase.buf_append(chase_buf, { "Mode: Anonymous Test" })
+        chase.buf_info(chase_buf, { "Mode: Anonymous Test" })
     end
 
-    chase.buf_append(chase_buf, {
+    chase.buf_info(chase_buf, {
         "Zig: " .. (M.zig_bin or "zig"),
         "Version: " .. (M.zig_version or "unknown"),
         "Strategy: " .. (artifact_name and "zig build artifact" or "zig run/test (fallback)"),
@@ -199,7 +196,7 @@ function M.run_file(file)
     if params ~= "" then
        table.insert(cmd_list, "--")
        table.insert(cmd_list, params)
-        chase.buf_append(chase_buf, { "Params: " .. params })
+        chase.buf_info(chase_buf, { "Params: " .. params })
     end
 
     chase.buf_append(chase_buf, { "", "" })

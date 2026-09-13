@@ -200,10 +200,7 @@ function M.run_file(file)
     if testing then
         action = "Testing "
     end
-    chase.buf_append(chase_buf, {
-        "Candango Chase",
-        action .. relative_file,
-    })
+    chase.buf_header(chase_buf, action, relative_file)
 
     local java_execution = M.java_bin
     local java_args = ""
@@ -214,12 +211,12 @@ function M.run_file(file)
         local full_class = package ~= "" and (package .. "." .. class_name) or class_name
         local where_am_i = M.where_am_i(buf)
 
-        chase.buf_append(chase_buf, {
+        chase.buf_info(chase_buf, {
             "Test class: " .. full_class,
         })
 
         if where_am_i ~= "" then
-            chase.buf_append(chase_buf, {
+            chase.buf_info(chase_buf, {
                 "Location: " .. where_am_i,
             })
         end
@@ -279,7 +276,7 @@ function M.run_file(file)
         end
     end
 
-    chase.buf_append(chase_buf, {
+    chase.buf_info(chase_buf, {
         "Java: " .. M.java_bin,
         "Version: " .. M.java_version,
         "", "",

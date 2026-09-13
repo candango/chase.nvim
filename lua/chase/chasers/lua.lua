@@ -43,14 +43,7 @@ function M.run_file(file)
 
     chase.buf_clear(chase_buf)
     local action = testing and "Testing " or "Running "
-    chase.buf_append(chase_buf, {
-        "Candango Chase",
-        action .. relative_file,
-    })
-
-    chase.buf_add_highlight(chase_buf, "ChaseTitle",  0, 0, -1)
-    chase.buf_add_highlight(chase_buf, "ChaseAction", 1, 0, #action)
-    chase.buf_add_highlight(chase_buf, "ChaseFile",   1, #action, -1)
+    chase.buf_header(chase_buf, action, relative_file)
 
     if testing then
         local plenary_root = find_plugin_root("plenary")
@@ -61,14 +54,11 @@ function M.run_file(file)
         if plenary_root then rtp = rtp .. "," .. plenary_root end
         if ts_root then rtp = rtp .. "," .. ts_root end
 
-        chase.buf_append(chase_buf, {
+        chase.buf_info(chase_buf, {
             "Lua: nvim headless (Plenary)",
             "Version: " .. jit.version,
             "",
         })
-
-        chase.buf_add_highlight(chase_buf, "ChaseInfo", 2, 0, -1)
-        chase.buf_add_highlight(chase_buf, "ChaseInfo", 3, 0, -1)
 
         local cmd = {
             "nvim", "--headless", "--noplugin", "-u", "NONE",
@@ -101,8 +91,8 @@ function M.run_file(file)
             end,
         })
     else
-        chase.buf_append(chase_buf, {
-            "Lua: nvim embeded",
+        chase.buf_info(chase_buf, {
+            "Lua: nvim embedded",
             "Version: " .. jit.version,
             "",
         })

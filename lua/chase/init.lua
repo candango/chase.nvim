@@ -325,15 +325,19 @@ function M.buf_append(buf, lines)
     local line_count = vim.api.nvim_buf_line_count(buf)
     local is_new = line_count == 1 and vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1] == ""
 
+    local first_row
     if is_new then
         -- If it's a fresh buffer, don't leave an empty line at the top
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+        first_row = 0
     else
         -- Append at the very end, which always creates new lines
         vim.api.nvim_buf_set_lines(buf, -1, -1, false, lines)
+        first_row = line_count
     end
 
     vim.bo[buf].modifiable = false
+    M.buf_highlight_lines(buf, first_row, first_row + #lines)
     M.buf_scroll(buf)
 end
 
@@ -348,13 +352,122 @@ function M.buf_scroll(buf)
 end
 
 --- Applies a highlight group to a range of columns on a buffer line.
+--- Uses an extmark on the chase namespace, so the highlight is stored with
+--- the line and costs nothing on redraw.
 --- @param buf number The buffer number.
 --- @param hl_group string The highlight group name.
 --- @param row number 0-indexed line number.
 --- @param col_start number 0-indexed start column.
 --- @param col_end number End column (-1 for end of line).
 function M.buf_add_highlight(buf, hl_group, row, col_start, col_end)
-    vim.api.nvim_buf_add_highlight(buf, M.ns, hl_group, row, col_start, col_end)
+    local line = vim.api.nvim_buf_get_lines(buf, row, row + 1, false)[1]
+    if not line then return end
+    if col_end == -1 or col_end > #line then
+        col_end = #line
+    end
+    if col_start >= col_end then return end
+    vim.api.nvim_buf_set_extmark(buf, M.ns, row, col_start, {
+        end_col = col_end,
+        hl_group = hl_group,
+    })
+end
+
+--- Ordered list of patterns applied to process output lines.
+--- The first matching entry wins and highlights the whole line.
+--- Patterns are anchored at the start of the line on purpose: they run once
+--- per line at insertion time, on the main loop, so keep them cheap.
+--- Chasers or users may extend this table before running.
+--- @type { pattern: string, group: string }[]
+M.output_patterns = {
+    -- go test
+    { pattern = "^%-%-%- FAIL", group = "ChaseError" },
+    { pattern = "^%-%-%- PASS", group = "ChaseSuccess" },
+    { pattern = "^FAIL", group = "ChaseError" },
+    { pattern = "^PASS", group = "ChaseSuccess" },
+    { pattern = "^ok%s", group = "ChaseSuccess" },
+    { pattern = "^panic:", group = "ChaseError" },
+    -- python unittest
+    { pattern = "^OK", group = "ChaseSuccess" },
+    { pattern = "^FAILED", group = "ChaseError" },
+    { pattern = "^Traceback", group = "ChaseError" },
+    -- cargo test / rustc / zig
+    { pattern = "^test result: ok", group = "ChaseSuccess" },
+    { pattern = "^test result: FAILED", group = "ChaseError" },
+    { pattern = "^error", group = "ChaseError" },
+    { pattern = "^warning", group = "ChaseWarning" },
+    -- plenary
+    { pattern = "^Success:", group = "ChaseSuccess" },
+    { pattern = "^Failed :", group = "ChaseError" },
+    { pattern = "^Errors :", group = "ChaseError" },
+    -- chase itself
+    { pattern = "^Exit: failed", group = "ChaseError" },
+    { pattern = "^Error:", group = "ChaseError" },
+}
+
+--- Resolves the highlight group for a process output line.
+--- @param line string The line text.
+--- @return string|nil group The highlight group name or nil when no pattern matches.
+function M.output_group(line)
+    for _, entry in ipairs(M.output_patterns) do
+        if line:find(entry.pattern) then
+            return entry.group
+        end
+    end
+    return nil
+end
+
+--- Re-scans a range of buffer rows and applies output highlights.
+--- Existing chase highlights on those rows are dropped first, so a line that
+--- was welded from two chunks ends up with a single mark.
+--- @param buf number The buffer number.
+--- @param first_row number 0-indexed first row, inclusive.
+--- @param last_row number 0-indexed last row, exclusive.
+function M.buf_highlight_lines(buf, first_row, last_row)
+    local lines = vim.api.nvim_buf_get_lines(buf, first_row, last_row, false)
+    for i, line in ipairs(lines) do
+        local row = first_row + i - 1
+        vim.api.nvim_buf_clear_namespace(buf, M.ns, row, row + 1)
+        local group = M.output_group(line)
+        if group then
+            M.buf_add_highlight(buf, group, row, 0, -1)
+        end
+    end
+end
+
+--- Appends the standard Chase header (title plus action line) and highlights
+--- it. Rows are read from the buffer, never assumed.
+--- @param buf number The buffer number.
+--- @param action string The action verb, e.g. "Running " or "Testing ".
+--- @param file string The project-relative file being chased.
+function M.buf_header(buf, action, file)
+    local line_count = vim.api.nvim_buf_line_count(buf)
+    local is_new = line_count == 1 and vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1] == ""
+    local row = is_new and 0 or line_count
+    M.buf_append(buf, { "Candango Chase", action .. file })
+    vim.api.nvim_buf_clear_namespace(buf, M.ns, row, row + 2)
+    M.buf_add_highlight(buf, "ChaseTitle", row, 0, -1)
+    M.buf_add_highlight(buf, "ChaseAction", row + 1, 0, #action)
+    M.buf_add_highlight(buf, "ChaseFile", row + 1, #action, -1)
+end
+
+--- Appends "Key: value" information lines and highlights the key part.
+--- Lines without a "Key:" prefix are appended untouched.
+--- @param buf number The buffer number.
+--- @param lines string[] Information lines.
+function M.buf_info(buf, lines)
+    if not lines or #lines == 0 then return end
+    local line_count = vim.api.nvim_buf_line_count(buf)
+    local is_new = line_count == 1 and vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1] == ""
+    local first_row = is_new and 0 or line_count
+    M.buf_append(buf, lines)
+    for i, line in ipairs(lines) do
+        local row = first_row + i - 1
+        local key = line:match("^([%w%s]+):")
+        if key then
+            vim.api.nvim_buf_clear_namespace(buf, M.ns, row, row + 1)
+            M.buf_add_highlight(buf, "ChaseInfo", row, 0, #key + 1)
+        end
+    end
 end
 
 --- Streams chunks into a buffer, welding incomplete lines together.
@@ -367,20 +480,25 @@ function M.buf_stream(buf, lines)
     local line_count = vim.api.nvim_buf_line_count(buf)
     local last_line = vim.api.nvim_buf_get_lines(buf, line_count - 1, line_count, false)[1] or ""
 
+    local first_row
     if line_count == 1 and last_line == "" then
         -- First chunk in a clean buffer
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+        first_row = 0
     elseif last_line ~= "" then
         -- Join the first chunk of the new data to the last line of the buffer
         local new_lines = { last_line .. lines[1] }
         for i = 2, #lines do table.insert(new_lines, lines[i]) end
         vim.api.nvim_buf_set_lines(buf, line_count - 1, line_count, false, new_lines)
+        first_row = line_count - 1
     else
         -- Last line was empty (previous chunk ended with newline), append normally
         vim.api.nvim_buf_set_lines(buf, line_count - 1, -1, false, lines)
+        first_row = line_count - 1
     end
 
     vim.bo[buf].modifiable = false
+    M.buf_highlight_lines(buf, first_row, first_row + #lines)
     M.buf_scroll(buf)
 end
 
@@ -737,14 +855,31 @@ function M.refresh()
     end
 end
 
+--- Defines the Chase highlight groups as defaults, so colorschemes and user
+--- configuration can override them. Re-applied on ColorScheme because
+--- `:colorscheme` clears every group.
+function M.setup_highlights()
+    vim.api.nvim_set_hl(0, "ChaseWindow",  { link = "NormalFloat",    default = true })
+    vim.api.nvim_set_hl(0, "ChaseBorder",  { link = "FloatBorder",    default = true })
+    vim.api.nvim_set_hl(0, "ChaseTitle",   { link = "Title",          default = true })
+    vim.api.nvim_set_hl(0, "ChaseAction",  { link = "Keyword",        default = true })
+    vim.api.nvim_set_hl(0, "ChaseFile",    { link = "Directory",      default = true })
+    vim.api.nvim_set_hl(0, "ChaseInfo",    { link = "Comment",        default = true })
+    vim.api.nvim_set_hl(0, "ChaseError",   { link = "DiagnosticError", default = true })
+    vim.api.nvim_set_hl(0, "ChaseWarning", { link = "DiagnosticWarn",  default = true })
+    vim.api.nvim_set_hl(0, "ChaseSuccess", { link = "DiagnosticOk",    default = true })
+end
+
+M.setup_highlights()
+
+vim.api.nvim_create_autocmd("ColorScheme", {
+    callback = M.setup_highlights,
+    group = M.group,
+})
+
 vim.api.nvim_create_autocmd("VimEnter", {
     callback = function ()
-        vim.cmd [[highlight! default link ChaseWindow NormalFloat]]
-        vim.cmd [[highlight! default link ChaseBorder FloatBorder]]
-        vim.api.nvim_set_hl(0, "ChaseTitle",  { link = "Title",     default = true })
-        vim.api.nvim_set_hl(0, "ChaseAction", { link = "Keyword",   default = true })
-        vim.api.nvim_set_hl(0, "ChaseFile",   { link = "Directory", default = true })
-        vim.api.nvim_set_hl(0, "ChaseInfo",   { link = "Comment",   default = true })
+        M.setup_highlights()
         M.vim_did_enter = true
         M.setup_virtualenv("chase_global", M.set_python_global)
         M.refresh()

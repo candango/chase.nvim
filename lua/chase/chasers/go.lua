@@ -317,10 +317,7 @@ function M.run_file(file)
     elseif testing then
         action = "Testing "
     end
-    chase.buf_append(chase_buf, {
-        "Candango Chase",
-        action .. relative_file,
-    })
+    chase.buf_header(chase_buf, action, relative_file)
 
     local build_tags_arg = M.get_build_tags_arg()
     local package_path = M.get_package_path(file)
@@ -352,7 +349,7 @@ function M.run_file(file)
             where_am_i = M.where_am_i(buf)
         end
         if where_am_i ~= "" then
-            chase.buf_append(chase_buf, {
+            chase.buf_info(chase_buf, {
                 "Location: " .. where_am_i,
             })
         end
@@ -368,19 +365,19 @@ function M.run_file(file)
         go_execution = "CGO_ENABLED=0 " .. M.go_bin ..  " clean -testcache && " .. go_execution
     end
 
-    chase.buf_append(chase_buf, {
+    chase.buf_info(chase_buf, {
         "Go: " .. M.go_bin,
         "Version: " .. M.go_version,
     })
 
     if M.get_build_tags() ~= "" then
-        chase.buf_append(chase_buf, {
+        chase.buf_info(chase_buf, {
             "Build tags: " .. M.get_build_tags(),
         })
     end
 
     if params ~= "" then
-        chase.buf_append(chase_buf, { "Params: " .. params })
+        chase.buf_info(chase_buf, { "Params: " .. params })
     end
 
     chase.buf_append(chase_buf, {

@@ -131,10 +131,7 @@ function M.run_file(file)
     if testing then
         action = "Testing "
     end
-    chase.buf_append(chase_buf, {
-        "Candango Chase",
-        action .. relative_file,
-    })
+    chase.buf_header(chase_buf, action, relative_file)
 
     local php_cmd = M.php_bin
     local php_args = ""
@@ -144,7 +141,7 @@ function M.run_file(file)
             php_cmd = M.phpunit_bin
             if where_am_i ~= "" then
                 php_args = "--filter '" .. where_am_i .. "'"
-                chase.buf_append(chase_buf, {
+                chase.buf_info(chase_buf, {
                     "Filter: " .. where_am_i,
                 })
             end
@@ -172,13 +169,13 @@ function M.run_file(file)
         local autoloader = chase.project_root:joinpath("vendor", "autoload.php")
         if autoloader:exists() then
             php_args = php_args .. " -d auto_prepend_file='" .. autoloader.filename .. "'"
-            chase.buf_append(chase_buf, {
+            chase.buf_info(chase_buf, {
                 "Autoloader: " .. autoloader.filename,
             })
         end
     end
 
-    chase.buf_append(chase_buf, {
+    chase.buf_info(chase_buf, {
         "PHP: " .. M.php_bin,
         "Version: " .. (M.php_version or "unknown"),
         "",
