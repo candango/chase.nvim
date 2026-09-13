@@ -71,7 +71,10 @@ The universal command for Chase is `<leader>cc`.
   (`file.go:12`, `src/main.rs:4:5`, `File "x.py", line 12`, `Foo.java:12`)
   to open that file in the window you started from, at the line and column.
   Package-relative names printed by `go test` are resolved by searching the
-  project root.
+  project root. When the line points outside the project (standard library,
+  `site-packages`, Go runtime frames), Chase jumps to the nearest project
+  location in the same output block instead, so a Zig `error:` in `std`
+  lands on the `note:` naming your file.
 
 ## 🎨 Highlighting
 
@@ -89,7 +92,8 @@ so well-known lines such as `--- FAIL`, `ok`, `panic:`, `Traceback`,
 | `ChaseSuccess` | `DiagnosticOk` | Passing test summaries |
 | `ChaseWarning` | `DiagnosticWarn` | Compiler warnings |
 | `ChaseError` | `DiagnosticError` | Failures, panics, tracebacks, compiler errors and non-zero exits |
-| `ChaseLocation` | `Underlined` | `file:line[:col]` spans that `<CR>` can jump to |
+| `ChaseLocation` | `Underlined` | Project `file:line[:col]` spans that `<CR>` jumps to |
+| `ChaseLocationExternal` | `Comment` | Locations outside the project, such as standard library frames |
 
 All groups are defined with `default = true`, so a colorscheme or your own
 configuration can override them:

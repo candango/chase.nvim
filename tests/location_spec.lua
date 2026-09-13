@@ -189,7 +189,7 @@ describe("Chase location highlighting", function()
             "",
         })
         assert.are.equal("ChaseError", groups_on(buf, 0)[1].group)
-        assert.are.equal("ChaseLocation", groups_on(buf, 0)[2].group)
+        assert.are.equal("ChaseLocationExternal", groups_on(buf, 0)[2].group)
         assert.are.equal("ChaseInfo", groups_on(buf, 1)[1].group)
         assert.are.equal("ChaseWarning", groups_on(buf, 2)[1].group)
         assert.are.equal("ChaseError", groups_on(buf, 3)[1].group)
@@ -203,5 +203,110 @@ describe("Chase location highlighting", function()
                 assert.are_not.equal("ChaseLocation", mark.group)
             end
         end
+    end)
+end)
+
+describe("Chase project-first jump", function()
+    local src_buf, src_win, chase_buf
+
+    before_each(function()
+        test.setup_project(go_project)
+        local file = go_project .. chase.sep .. "benchmark_test.go"
+        src_buf, src_win = test.create_buffer_from_file(file)
+        chase_buf = chase.buf_chase("benchmark_test.go", src_buf)
+    end)
+
+    after_each(function()
+        chase.chase_buf_destroy(chase_buf)
+        pcall(vim.api.nvim_win_close, src_win, true)
+        test.destroy_buffer(src_buf)
+        test.reset_project()
+    end)
+
+    it("classifies locations without touching the filesystem", function()
+        assert.is_true(chase.is_project_location(chase.parse_location("thing_test.go:3: x")))
+        assert.is_true(chase.is_project_location(
+            chase.parse_location(go_project .. "/toplevel_test.go:3: x")))
+        assert.is_false(chase.is_project_location(
+            chase.parse_location("/usr/lib/zig/std/start.zig:697:43: error: x")))
+        assert.is_false(chase.is_project_location(
+            chase.parse_location('  File "/usr/lib/python3.12/unittest/case.py", line 58, in x')))
+    end)
+
+    it("prefers the project note below a zig stdlib error", function()
+        chase.buf_stream(chase_buf, {
+            "/usr/lib/zig/std/start.zig:697:43: error: root source file struct has no member named 'main'",
+            "    const fn_info = @typeInfo(@TypeOf(root.main)).@\"fn\";",
+            "toplevel_test.go:5:1: note: struct declared here",
+            "",
+        })
+        assert.is_true(chase.jump_to_location(
+            chase_buf, vim.api.nvim_buf_get_lines(chase_buf, 0, 1, false)[1], 0))
+        assert.are.equal(
+            go_project .. chase.sep .. "toplevel_test.go",
+            vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(src_win))
+        )
+        assert.are.same({ 5, 0 }, vim.api.nvim_win_get_cursor(src_win))
+        test.destroy_buffer(vim.api.nvim_win_get_buf(src_win))
+    end)
+
+    it("prefers the project frame below go runtime frames", function()
+        chase.buf_stream(chase_buf, {
+            "panic: boom",
+            "",
+            "goroutine 1 [running]:",
+            "runtime/debug.Stack()",
+            "\t/usr/lib/go/src/runtime/debug/stack.go:24 +0x5e",
+            "goproject.TestTopLevel1(0xc000001)",
+            "\t" .. go_project .. "/toplevel_test.go:6 +0x1d",
+            "",
+        })
+        assert.is_true(chase.jump_to_location(
+            chase_buf, vim.api.nvim_buf_get_lines(chase_buf, 4, 5, false)[1], 4))
+        assert.are.same({ 6, 0 }, vim.api.nvim_win_get_cursor(src_win))
+        test.destroy_buffer(vim.api.nvim_win_get_buf(src_win))
+    end)
+
+    it("looks above when the project frame precedes a library frame", function()
+        chase.buf_stream(chase_buf, {
+            "Traceback (most recent call last):",
+            '  File "' .. go_project .. '/toplevel_test.go", line 3, in run',
+            '  File "/usr/lib/python3.12/unittest/case.py", line 58, in testPartExecutor',
+            "AssertionError: boom",
+            "",
+        })
+        assert.is_true(chase.jump_to_location(
+            chase_buf, vim.api.nvim_buf_get_lines(chase_buf, 2, 3, false)[1], 2))
+        assert.are.same({ 3, 0 }, vim.api.nvim_win_get_cursor(src_win))
+        test.destroy_buffer(vim.api.nvim_win_get_buf(src_win))
+    end)
+
+    it("does not cross a blank line looking for project lines", function()
+        local external = vim.env.VIMRUNTIME .. "/filetype.lua"
+        chase.buf_stream(chase_buf, {
+            external .. ":1:1: error: x",
+            "",
+            "toplevel_test.go:5:1: note: unrelated",
+            "",
+        })
+        assert.is_true(chase.jump_to_location(
+            chase_buf, vim.api.nvim_buf_get_lines(chase_buf, 0, 1, false)[1], 0))
+        assert.are.equal(
+            vim.fn.fnamemodify(external, ":p"),
+            vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(src_win))
+        )
+        test.destroy_buffer(vim.api.nvim_win_get_buf(src_win))
+    end)
+
+    it("underlines project and external locations differently", function()
+        local buf = vim.api.nvim_create_buf(false, true)
+        chase.buf_stream(buf, {
+            "/usr/lib/zig/std/start.zig:697:43: error: x",
+            "toplevel_test.go:5:1: note: here",
+            "",
+        })
+        assert.are.equal("ChaseLocationExternal", groups_on(buf, 0)[2].group)
+        assert.are.equal("ChaseLocation", groups_on(buf, 1)[2].group)
+        test.destroy_buffer(buf)
     end)
 end)

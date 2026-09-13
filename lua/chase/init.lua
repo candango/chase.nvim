@@ -460,6 +460,46 @@ function M.parse_location(text)
     return nil
 end
 
+--- Tells whether a location belongs to the project without touching the
+--- filesystem: absolute paths under the project root are project files,
+--- other absolute paths are external, relative names are assumed to be
+--- project files since runners print them relative to the package.
+--- @param location ChaseLocation The parsed location.
+--- @return boolean result True when the location is a project file.
+function M.is_project_location(location)
+    local file = location.file
+    local absolute = file:sub(1, 1) == "/" or file:match("^%a:[/\\]") ~= nil
+    if not absolute then
+        return true
+    end
+    local root = M.project_root and M.project_root.filename or vim.fn.getcwd()
+    root = root:gsub("[/\\]+$", "")
+    return file:sub(1, #root + 1) == root .. M.sep
+end
+
+--- Walks the contiguous block of non-blank lines around `row` and returns
+--- the nearest project location, looking below first and then above.
+--- @param buf number The buffer number.
+--- @param row number 0-indexed row of the starting line.
+--- @return ChaseLocation|nil location Nil when the block has no project line.
+function M.nearest_project_location(buf, row)
+    local line_count = vim.api.nvim_buf_line_count(buf)
+    local function scan(from, to, step)
+        for r = from, to, step do
+            local line = vim.api.nvim_buf_get_lines(buf, r, r + 1, false)[1] or ""
+            if line == "" then
+                return nil
+            end
+            local location = M.parse_location(line)
+            if location and M.is_project_location(location) then
+                return location
+            end
+        end
+        return nil
+    end
+    return scan(row + 1, line_count - 1, 1) or scan(row - 1, 0, -1)
+end
+
 --- Resolves a file named in process output to an absolute readable path.
 --- Tries, in order: the path as given when absolute, the hint directory,
 --- the project root, and finally a basename search under the project root
@@ -528,15 +568,22 @@ function M.jump_target_window(chase_buf, original_buf)
     return vim.api.nvim_get_current_win()
 end
 
---- Jumps from an output line to the source location it names.
+--- Jumps from an output line to the source location it names. When the
+--- line points outside the project (standard library, site-packages), the
+--- nearest project location in the same output block wins, if any.
 --- @param chase_buf number The Chase buffer the line belongs to.
 --- @param text string The output line text.
+--- @param row number|nil 0-indexed row of `text` in `chase_buf`, enables the
+--- project-first lookup.
 --- @return boolean jumped True when a window now shows the location.
-function M.jump_to_location(chase_buf, text)
+function M.jump_to_location(chase_buf, text, row)
     local location = M.parse_location(text)
     if not location then
         vim.notify("Chase: no source location on this line", vim.log.levels.WARN)
         return false
+    end
+    if row and not M.is_project_location(location) then
+        location = M.nearest_project_location(chase_buf, row) or location
     end
 
     local ok, original_buf = pcall(vim.api.nvim_buf_get_var, chase_buf, "original_buf")
@@ -570,7 +617,8 @@ end
 --- @return boolean jumped
 function M.buf_jump(chase_buf)
     local text = vim.api.nvim_get_current_line()
-    return M.jump_to_location(chase_buf, text)
+    local row = vim.api.nvim_win_get_cursor(0)[1] - 1
+    return M.jump_to_location(chase_buf, text, row)
 end
 
 --- Resolves the highlight group for a process output line.
@@ -602,8 +650,10 @@ function M.buf_highlight_lines(buf, first_row, last_row)
         end
         local location = M.parse_location(line)
         if location then
+            local location_group = M.is_project_location(location)
+                and "ChaseLocation" or "ChaseLocationExternal"
             M.buf_add_highlight(
-                buf, "ChaseLocation", row, location.col_start, location.col_end
+                buf, location_group, row, location.col_start, location.col_end
             )
         end
     end
@@ -1044,6 +1094,7 @@ function M.setup_highlights()
     vim.api.nvim_set_hl(0, "ChaseWarning", { link = "DiagnosticWarn",  default = true })
     vim.api.nvim_set_hl(0, "ChaseSuccess", { link = "DiagnosticOk",    default = true })
     vim.api.nvim_set_hl(0, "ChaseLocation", { link = "Underlined",     default = true })
+    vim.api.nvim_set_hl(0, "ChaseLocationExternal", { link = "Comment", default = true })
 end
 
 M.setup_highlights()
