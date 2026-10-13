@@ -4,9 +4,10 @@ local M =  {}
 
 local borderchars = { "─", "│", "─", "│", "╭", "╮", "╯", "╰" }
 
-local window_keymap = function(buf, mode, key, callback)
+local window_keymap = function(buf, mode, key, callback, desc)
     vim.keymap.set(mode, key, callback, {
         buffer = buf,
+        desc = desc,
     })
 end
 
@@ -47,7 +48,7 @@ local function create_floating_window(title, config, enter)
     window_keymap(buf, "n", "q", function ()
         vim.api.nvim_win_close(win, true)
         vim.api.nvim_buf_delete(buf, {unload = true})
-    end)
+    end, "Chase: close floating window")
 
     vim.wo[win].winhl = "FloatBorder:ChaseWindowBorder"
     return { buf = buf, win = win }
@@ -81,10 +82,10 @@ function M.create_popup(width, height)
         borderchars = borderchars,
     })
 
-    window_keymap("n", "q", function ()
+    window_keymap(state.buf, "n", "q", function ()
         vim.api.nvim_win_close(win_id, true)
         vim.api.nvim_buf_delete(state.buf, {unload = true})
-    end)
+    end, "Chase: close popup")
 
     vim.api.nvim_set_hl(0, "ChaseWindow", {bg = "NONE"})
     vim.api.nvim_set_hl(0, "ChaseWindowBorder", {bg = "NONE"})
@@ -106,12 +107,5 @@ local function create_window_config(width, height)
 end
 
 vim.api.nvim_create_user_command("ShowWindow", function()
-    local _, win = create_floating_window("Tmux Sessions", create_window_config(60, 20), true)
-    if win then
-        window_keymap("n", "<leader> q", function ()
-            vim.api.nvim_win_close(win, true)
-            vim.api.nvim_buf_delete(state.buf, {unload = true})
-        end)
-    end
-
+    create_floating_window("Tmux Sessions", create_window_config(60, 20), true)
 end, {})
