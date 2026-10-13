@@ -55,6 +55,7 @@ function M.update_project_root(new_root)
     M.log.info("Project root updated to: " .. M.project_root.filename)
     -- Reset state that depends on the root
     M.buf_params = {}
+    M.buf_envs = {}
 end
 
 --- Retrieves Git project information for isolation.
@@ -123,6 +124,12 @@ M.ns = vim.api.nvim_create_namespace("chase")
 --- Key: buffer number (integer)
 --- Value: parameter string (string)
 M.buf_params = {}
+
+--- @type table<number, string>
+--- Map of buffer numbers to their raw execution environment prefixes.
+--- Key: buffer number (integer)
+--- Value: environment assignment string (string)
+M.buf_envs = {}
 
 function M.chase_it(opts)
     print(vim.inspect(opts.args))
@@ -208,7 +215,7 @@ function M.buf_open(name, buf, type)
         vim.api.nvim_buf_set_keymap(chase_buf, "n", "<leader>q", "",
             {callback = function()
                 M.chase_buf_destroy(chase_buf)
-            end}
+            end, desc = "Chase: delete output buffer"}
         )
         for _, lhs in ipairs({ "<CR>", "gd" }) do
             vim.api.nvim_buf_set_keymap(chase_buf, "n", lhs, "",
@@ -749,6 +756,27 @@ function M.buf_params_clear(buf)
     print("Chase: Params cleared for buffer " .. buf)
 end
 
+--- Open a prompt to add or edit raw environment assignments for a buffer.
+--- @param buf number The buffer number to manage environment variables for.
+function M.buf_env_edit(buf)
+    local current_env = M.buf_envs[buf] or ""
+    vim.ui.input({
+        prompt = "Chase Env: ",
+        default = current_env,
+    }, function(input)
+        if input then
+            M.buf_envs[buf] = input
+            M.log.info("Environment updated for buffer " .. buf)
+        end
+    end)
+end
+
+--- Clear all environment assignments for the current buffer.
+function M.buf_env_clear(buf)
+    M.buf_envs[buf] = nil
+    print("Chase: Environment cleared for buffer " .. buf)
+end
+
 function M.setup(config)
     config = config or {}
     M.config = vim.tbl_deep_extend("force", M.config, config)
@@ -932,28 +960,52 @@ function M.setup_chaser(chaser)
         {
             mode = "n",
             lhs = "<leader>cc",
-            opts = { callback = function ()
-                chaser.run_file(vim.api.nvim_buf_get_name(0))
-            end },
-        },{
-            mode = "n",
-            lhs = "<leader>ca",
-            opts = { callback = function () M.buf_params_edit(cur_buf) end },
+            opts = {
+                callback = function ()
+                    chaser.run_file(vim.api.nvim_buf_get_name(0))
+                end,
+                desc = "Chase: run current file or test",
+            },
         },
         {
             mode = "n",
-            lhs = "<leader>cd",
-            opts = { callback = function () M.destroy_my_chase(cur_buf) end },
+            lhs = "<leader>caa",
+            opts = {
+                callback = function () M.buf_params_edit(cur_buf) end,
+                desc = "Chase: edit run arguments",
+            },
         },
         {
             mode = "n",
-            lhs = "<leader>cx",
-            opts = { callback = function () M.buf_params_clear(cur_buf) end },
+            lhs = "<leader>cax",
+            opts = {
+                callback = function () M.buf_params_clear(cur_buf) end,
+                desc = "Chase: clear run arguments",
+            },
+        },
+        {
+            mode = "n",
+            lhs = "<leader>cee",
+            opts = {
+                callback = function () M.buf_env_edit(cur_buf) end,
+                desc = "Chase: edit environment variables",
+            },
+        },
+        {
+            mode = "n",
+            lhs = "<leader>cex",
+            opts = {
+                callback = function () M.buf_env_clear(cur_buf) end,
+                desc = "Chase: clear environment variables",
+            },
         },
         {
             mode = "n",
             lhs = "<leader>q",
-            opts = { callback = function () M.destroy_my_chase(cur_buf) end },
+            opts = {
+                callback = function () M.destroy_my_chase(cur_buf) end,
+                desc = "Chase: delete output buffer",
+            },
         },
     }
     local found, _ = pcall(
