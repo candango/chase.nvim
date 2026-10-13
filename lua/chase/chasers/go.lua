@@ -292,6 +292,8 @@ end
 function M.run_file(file)
     local buf = vim.api.nvim_get_current_buf()
     local params = chase.buf_params[buf] or ""
+    local env_vars = chase.buf_envs[buf] or ""
+    local env_prefix = env_vars ~= "" and (env_vars .. " ") or ""
     if chase.is_windows() then
         file = file:gsub("/", chase.sep)
     end
@@ -325,7 +327,7 @@ function M.run_file(file)
     if build_tags_arg ~= "" then
         go_args = go_args .. " " .. build_tags_arg
     end
-    local go_execution = M.go_bin
+    local go_execution = env_prefix .. M.go_bin
     if testing then
         -- local row, _ = unpack(vim.api.nvim_win_get_cursor(0))
         -- local lines = vim.api.nvim_buf_get_lines(0, 0, row, false)
@@ -362,7 +364,12 @@ function M.run_file(file)
         else
             go_args = go_args .. " -v ./... -run='" .. where_am_i .. "'"
         end
-        go_execution = "CGO_ENABLED=0 " .. M.go_bin ..  " clean -testcache && " .. go_execution
+        local test_env = "CGO_ENABLED=0"
+        if env_vars ~= "" then
+            test_env = test_env .. " " .. env_vars
+        end
+        go_execution = test_env .. " " .. M.go_bin ..
+            " clean -testcache && " .. test_env .. " " .. M.go_bin
     end
 
     chase.buf_info(chase_buf, {
@@ -373,6 +380,12 @@ function M.run_file(file)
     if M.get_build_tags() ~= "" then
         chase.buf_info(chase_buf, {
             "Build tags: " .. M.get_build_tags(),
+        })
+    end
+
+    if env_vars ~= "" then
+        chase.buf_info(chase_buf, {
+            "Environment: configured",
         })
     end
 
