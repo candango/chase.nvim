@@ -22,6 +22,34 @@ When you press `<leader>cc`:
 - **Main Entry Point**:
   - If the file contains `func main()`, Chase runs it as the main application.
 
+## ⌨️ Execution controls
+
+The Go chaser exposes buffer-local execution controls:
+
+- `<leader>cc` runs the current file or test.
+- `<leader>caa` opens a free-form input for command parameters.
+- `<leader>cax` clears the stored command parameters.
+- `<leader>cee` opens a free-form input for environment variables.
+- `<leader>cex` clears the stored environment variables.
+- `<leader>q` deletes the Chase output buffer.
+
+The parameter and environment inputs are raw shell text. Chase does not parse
+or validate either value; the text is placed around the Go command as:
+
+```text
+ENVVARS go run ./package PARAMETERS
+```
+
+For example, entering `PORT=8080 DEBUG=true` as the environment and
+`--verbose` as the parameters runs:
+
+```text
+PORT=8080 DEBUG=true go run ./package --verbose
+```
+
+The values are isolated per source buffer. Do not enter secrets if the command
+or shell output would expose them.
+
 ## ⚙️ Configuration
 
 ```lua
